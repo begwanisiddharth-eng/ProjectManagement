@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "database": "SQLite",
+  "timestamp_format": "UTC ISO 8601 text",
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        { "name": "username", "type": "TEXT", "not_null": true, "unique": true },
+        { "name": "created_at", "type": "TEXT", "not_null": true }
+      ],
+      "constraints": []
+    },
+    {
+      "name": "boards",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        { "name": "user_id", "type": "TEXT", "not_null": true },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "created_at", "type": "TEXT", "not_null": true },
+        { "name": "updated_at", "type": "TEXT", "not_null": true }
+      ],
+      "constraints": [
+        { "type": "unique", "columns": ["user_id"] },
+        {
+          "type": "foreign_key",
+          "columns": ["user_id"],
+          "references": { "table": "users", "columns": ["id"] },
+          "on_delete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "columns",
+      "columns": [
+        { "name": "id", "type": "TEXT", "not_null": true },
+        { "name": "board_id", "type": "TEXT", "not_null": true },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "position", "type": "INTEGER", "not_null": true }
+      ],
+      "primary_key": ["board_id", "id"],
+      "constraints": [
+        { "type": "unique", "columns": ["board_id", "position"] },
+        { "type": "check", "expression": "position >= 0" },
+        { "type": "check", "expression": "length(trim(title)) > 0" },
+        {
+          "type": "foreign_key",
+          "columns": ["board_id"],
+          "references": { "table": "boards", "columns": ["id"] },
+          "on_delete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "cards",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        { "name": "board_id", "type": "TEXT", "not_null": true },
+        { "name": "column_id", "type": "TEXT", "not_null": true },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "details", "type": "TEXT", "not_null": true, "default": "" },
+        { "name": "position", "type": "INTEGER", "not_null": true },
+        { "name": "created_at", "type": "TEXT", "not_null": true },
+        { "name": "updated_at", "type": "TEXT", "not_null": true }
+      ],
+      "constraints": [
+        { "type": "unique", "columns": ["board_id", "column_id", "position"] },
+        { "type": "check", "expression": "position >= 0" },
+        { "type": "check", "expression": "length(trim(title)) > 0" },
+        {
+          "type": "foreign_key",
+          "columns": ["board_id"],
+          "references": { "table": "boards", "columns": ["id"] },
+          "on_delete": "cascade"
+        },
+        {
+          "type": "foreign_key",
+          "columns": ["board_id", "column_id"],
+          "references": { "table": "columns", "columns": ["board_id", "id"] },
+          "on_delete": "cascade"
+        }
+      ]
+    },
+    {
+      "name": "schema_migrations",
+      "columns": [
+        { "name": "version", "type": "INTEGER", "primary_key": true },
+        { "name": "applied_at", "type": "TEXT", "not_null": true }
+      ],
+      "constraints": []
+    }
+  ],
+  "indexes": [],
+  "initial_data": {
+    "mvp_user": {
+      "id": "local-user",
+      "username": "user",
+      "password_storage": "The MVP password remains hardcoded in backend configuration and is not stored in the database."
+    },
+    "board": {
+      "title": "Kanban Studio",
+      "columns": [
+        { "id": "col-backlog", "title": "Backlog", "position": 0 },
+        { "id": "col-discovery", "title": "Discovery", "position": 1 },
+        { "id": "col-progress", "title": "In Progress", "position": 2 },
+        { "id": "col-review", "title": "Review", "position": 3 },
+        { "id": "col-done", "title": "Done", "position": 4 }
+      ]
+    },
+    "cards": {
+      "source": "frontend/src/lib/kanban.ts",
+      "count": 8,
+      "rule": "Column IDs are stable. The API permits column title changes but does not permit adding, removing, or reordering the fixed columns."
+    }
+  },
+  "initialization": {
+    "foreign_keys": "Enable PRAGMA foreign_keys = ON for every SQLite connection.",
+    "schema": "Create missing tables and indexes transactionally without replacing existing data.",
+    "versioning": "Track applied schema versions in a schema_migrations table and apply ordered migrations at startup.",
+    "database_path": "Use a project-local ignored data directory; keep the path configurable for isolated tests."
+  }
+}
