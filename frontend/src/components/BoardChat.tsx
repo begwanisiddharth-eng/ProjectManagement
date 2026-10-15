@@ -93,8 +93,8 @@ export const BoardChat = ({
         id="board-chat-panel"
         className={`min-w-0 flex-col overflow-hidden rounded-[32px] border border-[var(--stroke)] bg-white/90 shadow-[var(--shadow)] backdrop-blur ${
           isOpen
-            ? "fixed inset-x-4 bottom-4 z-50 flex h-[min(680px,85vh)] min-h-[400px] sm:inset-x-auto sm:right-5 sm:w-[380px] min-[1400px]:sticky min-[1400px]:inset-auto min-[1400px]:top-8 min-[1400px]:h-[calc(100vh-4rem)] min-[1400px]:min-h-[520px]"
-            : "hidden min-[1400px]:sticky min-[1400px]:top-8 min-[1400px]:flex min-[1400px]:h-[calc(100vh-4rem)] min-[1400px]:min-h-[520px]"
+            ? "fixed inset-x-4 bottom-4 z-50 flex h-[min(680px,85vh)] min-h-[400px] sm:inset-x-auto sm:right-5 sm:w-[380px] min-[1400px]:sticky min-[1400px]:inset-auto min-[1400px]:top-8 min-[1400px]:h-full min-[1400px]:min-h-[520px]"
+            : "hidden min-[1400px]:sticky min-[1400px]:top-8 min-[1400px]:flex min-[1400px]:h-full min-[1400px]:min-h-[520px]"
         }`}
       >
         <header className="flex items-start justify-between gap-3 border-b border-[var(--stroke)] px-6 py-5">

@@ -286,7 +286,7 @@ export const KanbanBoard = () => {
           ) : null}
         </header>
 
-        <div className="grid items-start gap-6 min-[1400px]:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid items-stretch gap-6 min-[1400px]:grid-cols-[minmax(0,1fr)_340px]">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}

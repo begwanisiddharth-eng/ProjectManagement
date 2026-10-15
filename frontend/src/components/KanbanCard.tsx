@@ -96,16 +96,8 @@ export const KanbanCard = ({
           </div>
         </form>
       ) : (
-        <div className="flex min-w-0 items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
-              {card.title}
-            </h4>
-            <p className="mt-2 break-words text-sm leading-6 text-[var(--gray-text)]">
-              {card.details}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex min-w-0 flex-col">
+          <div className="flex justify-end gap-0.5">
             <button
               type="button"
               onClick={() => setIsEditing(true)}
@@ -150,6 +142,14 @@ export const KanbanCard = ({
                 <path d="M10 11v5M14 11v5" />
               </svg>
             </button>
+          </div>
+          <div className="min-w-0">
+            <h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
+              {card.title}
+            </h4>
+            <p className="mt-2 break-words text-sm leading-6 text-[var(--gray-text)]">
+              {card.details}
+            </p>
           </div>
         </div>
       )}
