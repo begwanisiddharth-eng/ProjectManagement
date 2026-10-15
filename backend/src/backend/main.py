@@ -147,11 +147,6 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/api/hello")
-    def hello(request: Request) -> dict[str, str]:
-        current_user(request)
-        return {"message": "Hello, world!"}
-
     @app.get("/api/board", response_model=BoardResponse)
     def get_board(request: Request) -> dict[str, object]:
         board = database.get_board(current_user(request))

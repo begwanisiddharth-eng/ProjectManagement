@@ -150,7 +150,7 @@ export const KanbanBoard = () => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, details: details || "No details yet." }),
+            body: JSON.stringify({ title, details }),
           }
         ),
       "Unable to add card. The board was not changed."

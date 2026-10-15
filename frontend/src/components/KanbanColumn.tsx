@@ -33,32 +33,21 @@ export const KanbanColumn = ({
     id: column.id,
     disabled: isSaving,
   });
-  const [titleDraft, setTitleDraft] = useState({
-    columnId: column.id,
-    value: column.title,
-    savedTitle: column.title,
-  });
-  const title =
-    titleDraft.columnId === column.id && titleDraft.savedTitle === column.title
-      ? titleDraft.value
-      : column.title;
+  const [draft, setDraft] = useState({ value: column.title, forTitle: column.title });
+  // Show the draft while editing, but fall back to column.title whenever it
+  // changes externally (AI rename or board reload) so stale drafts are discarded.
+  const title = draft.forTitle === column.title ? draft.value : column.title;
+
+  const resetDraft = () => setDraft({ value: column.title, forTitle: column.title });
 
   const saveTitle = async () => {
     const nextTitle = title.trim();
     if (!nextTitle || nextTitle === column.title) {
-      setTitleDraft({
-        columnId: column.id,
-        value: column.title,
-        savedTitle: column.title,
-      });
+      resetDraft();
       return;
     }
     if (!(await onRename(column.id, nextTitle))) {
-      setTitleDraft({
-        columnId: column.id,
-        value: column.title,
-        savedTitle: column.title,
-      });
+      resetDraft();
     }
   };
 
@@ -82,11 +71,7 @@ export const KanbanColumn = ({
           <input
             value={title}
             onChange={(event) =>
-              setTitleDraft({
-                columnId: column.id,
-                value: event.target.value,
-                savedTitle: column.title,
-              })
+              setDraft({ value: event.target.value, forTitle: column.title })
             }
             onBlur={saveTitle}
             onKeyDown={(event) => {

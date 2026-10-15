@@ -157,21 +157,6 @@ def test_logout_invalidates_session_and_deletes_cookie(client: TestClient) -> No
     assert root_response.url.path == "/login/"
 
 
-def test_protected_api_rejects_unauthenticated_requests(client: TestClient) -> None:
-    response = client.get("/api/hello")
-
-    assert response.status_code == 401
-
-
-def test_protected_api_accepts_authenticated_requests(client: TestClient) -> None:
-    sign_in(client)
-
-    response = client.get("/api/hello")
-
-    assert response.status_code == 200
-    assert response.json() == {"message": "Hello, world!"}
-
-
 def test_development_frontend_origin_can_use_cookie_auth(
     client: TestClient,
 ) -> None:
