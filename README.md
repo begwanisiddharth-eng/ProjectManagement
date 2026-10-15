@@ -254,7 +254,7 @@ Other operations are `create`, `edit`, and `move`. Pydantic validates the respon
 - `src/components/NewCardForm.tsx` — Validates title and required nonblank details before enabling card creation.
 - `src/components/BoardChat.tsx` — Responsive chat panel/launcher, conversation history, pending/error UI, and calls to the authenticated AI endpoint. It sends the returned board to `KanbanBoard` so accepted changes show immediately.
 - `src/lib/api.ts` — Shared `fetch` helper that includes credentials and directs development requests to FastAPI.
-- `src/lib/kanban.ts` — TypeScript board/card/column types, demo seed data, and drag/drop ordering helpers.
+- `src/lib/kanban.ts` — TypeScript board/card/column types and the drag/drop ordering helper (`moveCard`).
 - `src/lib/kanban.test.ts` — Unit tests for board ordering and movement helpers.
 - `src/components/KanbanBoard.test.tsx` — Component tests for loading, saving, errors, card details validation, and chat states/updates.
 - `src/test/setup.ts` and `src/test/vitest.d.ts` — Testing Library matchers and Vitest type declarations.

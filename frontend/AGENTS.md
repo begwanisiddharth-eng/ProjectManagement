@@ -4,7 +4,7 @@
 
 - `src/app/` contains the Next.js App Router entry page, root layout and global styles. The home page renders the Kanban board.
 - `src/components/` contains the columns, cards, drag preview, new-card form, sign-in form, and board UI. The home page checks backend session state before mounting `KanbanBoard`; the board loads and saves its state through the authenticated FastAPI API.
-- `src/lib/kanban.ts` defines the board, column and card types, initial demo data, card movement, and ID creation.
+- `src/lib/kanban.ts` defines the board, column and card types and the `moveCard` drag/reorder helper. The board loads from the backend and IDs are generated server-side, so the module carries no demo data.
 - `src/test/` configures Vitest and Testing Library.
 - `tests/` contains Playwright browser tests. `playwright.config.ts` builds the static site and serves it through FastAPI for these tests.
 - `public/` contains static image and SVG assets.
