@@ -219,7 +219,12 @@ Other operations are `create`, `edit`, and `move`. Pydantic validates the respon
 - `README.md` — Backend-focused setup, authentication, storage, API, and provider-test notes.
 - `AGENTS.md` — Backend implementation and testing guidance.
 - `src/backend/__init__.py` — Marks the Python backend package.
-- `src/backend/main.py` — Creates the FastAPI application, initializes SQLite on startup, defines login/session/logout, health, board, and AI routes, and serves `frontend/out/`.
+- `src/backend/main.py` — Assembles the FastAPI application: the `create_app` factory, SQLite initialization on startup, CORS, the health route, router registration, and serving of `frontend/out/`.
+- `src/backend/schemas.py` — Pydantic request and response models for the board API, with the shared string-constraint type aliases.
+- `src/backend/dependencies.py` — Shared FastAPI dependencies: database and session-store access from application state, and the signed-in-user guard.
+- `src/backend/auth_routes.py` — Sign-in, session, and sign-out routes.
+- `src/backend/board_routes.py` — Authenticated board read and card/column mutation routes.
+- `src/backend/ai_routes.py` — The authenticated AI chat route that applies validated board changes.
 - `src/backend/auth.py` — Defines the MVP credentials, session cookie name and lifetime, and in-memory session-token store.
 - `src/backend/database.py` — Defines the SQLite schema/migration, seeds the first board, enforces board ownership, loads and changes board data, orders cards, and applies AI operations in transactions.
 - `src/backend/ai_models.py` — Strict Pydantic request, reply, and discriminated board-operation types. Field constraints reject empty names/details and unsupported operations.

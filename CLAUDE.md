@@ -36,8 +36,11 @@ The live Groq connectivity test is opt-in only: set `RUN_GROQ_CONNECTIVITY=1` wi
 
 **Single-server model.** There is no Next.js runtime in production. `npm run build` produces a static export in `frontend/out/`, which FastAPI serves at `/` while also hosting the `/api/*` routes. Dev mode is the only time Next.js runs its own server (port 3000), and in that mode the frontend's `src/lib/api.ts` directs API calls to the backend on 8000 with credentialed CORS. Any change to routing, trailing slashes, or served assets involves both `frontend/next.config.ts` (static export config) and the static-serving logic in the backend.
 
-**Backend uses a src layout.** Code lives in `backend/src/backend/`, and the app is imported as `backend.main:app`. The pieces:
-- `main.py` — FastAPI app, SQLite init on startup, and all routes (auth, health, board, `/api/ai/chat`, static serving).
+**Backend uses a src layout.** Code lives in `backend/src/backend/`, and the app is imported as `backend.main:app`. Routes are split into `APIRouter` modules by concern rather than living in `main.py`. The pieces:
+- `main.py` — app assembly only: the `create_app` factory, lifespan (SQLite init on startup), CORS, the `/api/health` route, `include_router` for the three routers, and static serving of `frontend/out/` (the `/` route + mount). ~64 lines.
+- `schemas.py` — the Pydantic request/response DTOs (`LoginRequest`, `CardCreate`, `BoardResponse`, …) plus the shared `StringConstraints` type aliases.
+- `dependencies.py` — FastAPI `Depends` providers: `get_database` and `get_sessions` (both read `app.state`), and `current_user` (raises 401 when no valid session). Routes depend on these, so the database and `SessionStore` live on `app.state` and each `create_app()` is independently testable.
+- `auth_routes.py` / `board_routes.py` / `ai_routes.py` — the `APIRouter`s for `/api/auth/*`, `/api/board/*`, and `/api/ai/chat`.
 - `auth.py` — hardcoded MVP credentials (`user`/`password`) and an **in-memory** session-token store (8-hour expiry). Restarting the backend signs everyone out; the password is never stored in SQLite.
 - `database.py` — schema/migration, first-board seeding, ownership enforcement, board read/write, card ordering, and transactional application of AI operations.
 - `ai_models.py` — strict Pydantic request/reply types and a **discriminated union** of board operations (`create`, `edit`, `move`, `rename_column`); field constraints reject empty titles/details and unknown operations.
