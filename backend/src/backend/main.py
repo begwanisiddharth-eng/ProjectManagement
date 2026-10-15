@@ -28,6 +28,9 @@ FRONTEND_BUILD_DIR = Path(__file__).resolve().parents[3] / "frontend" / "out"
 BoardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 CardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 CardDetails = Annotated[str, StringConstraints(max_length=4000)]
+RequiredCardDetails = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
+]
 
 
 class LoginRequest(BaseModel):
@@ -41,7 +44,7 @@ class ColumnRename(BaseModel):
 
 class CardCreate(BaseModel):
     title: CardTitle
-    details: CardDetails = ""
+    details: RequiredCardDetails
 
 
 class CardUpdate(BaseModel):

@@ -12,6 +12,48 @@ test("loads the kanban board", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+  await expect(page.getByRole("button", { name: "Board chat" })).toBeVisible();
+});
+
+test("shows an assistant reply and applies its returned board update", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const boardResponse = await page.request.get("/api/board");
+  const board = (await boardResponse.json()) as {
+    columns: unknown[];
+    cards: Record<string, { id: string; title: string; details: string }>;
+  };
+  board.cards["card-1"].title = "Roadmap updated by assistant";
+  board.columns[4] = {
+    ...board.columns[4],
+    title: "Finished by assistant",
+  };
+  await page.route("**/api/ai/chat", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        reply: "I renamed the roadmap card.",
+        changed: true,
+        board,
+      }),
+    })
+  );
+
+  await page.getByRole("button", { name: "Board chat" }).click();
+  await page.getByRole("textbox", { name: "Ask the board assistant" }).fill(
+    "Rename the roadmap card"
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page.getByText("I renamed the roadmap card.")).toBeVisible();
+  await expect(page.getByText("Roadmap updated by assistant")).toBeVisible();
+  await expect(
+    page
+      .getByTestId("column-col-done")
+      .getByRole("textbox", { name: "Column title" })
+  ).toHaveValue("Finished by assistant");
 });
 
 test("adds a card to a column", async ({ page }) => {
@@ -20,7 +62,10 @@ test("adds a card to a column", async ({ page }) => {
   const title = `Playwright card ${Date.now()}`;
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill(title);
-  await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
+  const details = firstColumn.getByPlaceholder("Details");
+  await expect(details).toHaveAttribute("required", "");
+  await expect(firstColumn.getByRole("button", { name: /add card/i })).toBeDisabled();
+  await details.fill("Added via e2e.");
   await firstColumn.getByRole("button", { name: /add card/i }).click();
   await expect(firstColumn.getByText(title)).toBeVisible();
 

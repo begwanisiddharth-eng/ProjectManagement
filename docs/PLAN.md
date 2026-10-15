@@ -129,21 +129,37 @@ Deliver a locally run project management app with a persistent Kanban board, a s
 
 ## Phase 10: AI chat sidebar and end-to-end behavior
 
-- [ ] Add a sidebar chat interface for submitting questions and displaying conversation replies.
+- [x] Add a sidebar chat interface for submitting questions and displaying conversation replies.
   - **Verify:** Component and browser tests cover sending a message, displaying replies, empty input, loading state, and API errors.
   - **Complete when:** The signed-in user can chat with the backend and receives clear feedback while a request is pending or has failed.
-- [ ] Reflect accepted AI board changes in the board UI after the chat response.
+- [x] Reflect accepted AI board changes in the board UI after the chat response.
   - **Verify:** Integration/browser tests request a mocked or controlled board change and assert that the updated card and column state is visible without a full page reload.
   - **Complete when:** The UI and persisted board agree after AI creates, edits, or moves cards.
-- [ ] Verify authentication, chat, board updates, and persistence together.
+- [x] Verify authentication, chat, board updates, and persistence together.
   - **Verify:** Run the full frontend and backend suites plus an end-to-end flow against the locally served production build and a temporary database.
   - **Complete when:** A user can sign in, modify the board directly and through chat, reload the app, and see persisted changes; logout removes access.
 
 ## Final acceptance
 
-- [ ] Run documented setup and start/stop procedures on supported platforms where available; report any platform not exercised.
+- [x] Run documented setup and start/stop procedures on supported platforms where available; report any platform not exercised.
   - **Verify:** Follow the project setup instructions from a clean local environment.
-  - **Complete when:** The app starts and stops using the provided scripts and serves the static frontend and API locally.
-- [ ] Run all backend tests, frontend unit tests, browser tests, and production build checks.
+  - **Complete when:** The app starts and stops using the provided scripts and serves the static frontend and API locally. Windows setup, production build, start, health check, browser/API access, and stop were exercised in this environment. macOS/Linux runtime execution was unavailable; the shell scripts are present but were not run here.
+- [x] Run all backend tests, frontend unit tests, browser tests, and production build checks.
   - **Verify:** Record the commands and outcomes in the completion summary; run live Groq checks only when explicitly configured.
   - **Complete when:** Required offline checks pass, known limitations are disclosed, and no credentials or local database artifacts are committed.
+- [x] Provide a user tutorial covering local use, setup, project structure, and the main code/data flows.
+  - **Verify:** Confirm instructions and file descriptions against the checked-in project and run the documented setup and checks.
+  - **Complete when:** The repository-root `README.md` documents the application workflow, prerequisites, setup, tests, API, file-by-file project guide, and runtime-data boundaries.
+
+### Acceptance run record
+
+Validated on Windows on 2026-10-15:
+
+- `uv sync --project backend --locked` and `npm ci` completed from the checked-in dependency manifests. Backend tests and the Playwright suite were also exercised using fresh temporary `uv` environments.
+- `npm run test:all` passed: 15 frontend unit/component tests and 11 Playwright browser tests. The browser suite built the static site and served it through FastAPI using a temporary SQLite database.
+- `npm run lint` passed.
+- `uv run --project backend pytest` passed: 49 passed and the one opt-in live-Groq test skipped.
+- `uv lock --project backend --check` and `git diff --check` passed.
+- `scripts/start.ps1` started the server; health, login, board API, and the static frontend were verified; `scripts/stop.ps1` stopped it and released port 8000.
+- macOS and Linux runtime execution was not available in this Windows environment. The Unix scripts passed `bash -n`; their start/stop behavior remains unverified on those operating systems. A first Playwright startup attempt in a fresh environment exceeded the configured 120-second server readiness window; a retry completed all 11 browser tests successfully.
+- No live Groq request was made. `npm ci` reported 27 dependency audit advisories (1 low, 4 moderate, 18 high, and 4 critical); dependency upgrades were not part of this acceptance run.

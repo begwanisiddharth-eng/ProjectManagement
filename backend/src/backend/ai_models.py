@@ -6,6 +6,10 @@ Question = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
 Reply = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 CardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 CardDetails = Annotated[str, StringConstraints(max_length=4000)]
+ColumnTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+RequiredCardDetails = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
+]
 
 
 class StrictModel(BaseModel):
@@ -16,7 +20,7 @@ class CreateCardChange(StrictModel):
     operation: Literal["create"]
     column_id: str
     title: CardTitle
-    details: CardDetails = ""
+    details: RequiredCardDetails
 
 
 class EditCardChange(StrictModel):
@@ -39,8 +43,14 @@ class MoveCardChange(StrictModel):
     position: int = Field(ge=0)
 
 
+class RenameColumnChange(StrictModel):
+    operation: Literal["rename_column"]
+    column_id: str
+    title: ColumnTitle
+
+
 BoardChange: TypeAlias = Annotated[
-    CreateCardChange | EditCardChange | MoveCardChange,
+    CreateCardChange | EditCardChange | MoveCardChange | RenameColumnChange,
     Field(discriminator="operation"),
 ]
 

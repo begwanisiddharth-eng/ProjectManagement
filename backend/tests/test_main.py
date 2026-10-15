@@ -368,6 +368,22 @@ def test_move_card_reorders_within_a_column(client: TestClient) -> None:
     assert response.json()["columns"][0]["cardIds"] == ["card-2", "card-1"]
 
 
+def test_create_card_requires_nonblank_details(client: TestClient) -> None:
+    sign_in(client)
+
+    missing_details = client.post(
+        "/api/board/columns/col-backlog/cards",
+        json={"title": "Card"},
+    )
+    blank_details = client.post(
+        "/api/board/columns/col-backlog/cards",
+        json={"title": "Card", "details": "   "},
+    )
+
+    assert missing_details.status_code == 422
+    assert blank_details.status_code == 422
+
+
 def test_move_card_to_first_position_when_source_and_target_positions_match(
     client: TestClient,
 ) -> None:
@@ -393,7 +409,7 @@ def test_board_api_rejects_invalid_and_missing_records(client: TestClient) -> No
     )
     missing_column = client.post(
         "/api/board/columns/missing/cards",
-        json={"title": "Card"},
+        json={"title": "Card", "details": "Card details."},
     )
     missing_card = client.patch(
         "/api/board/cards/missing",
@@ -666,6 +682,43 @@ def test_ai_edit_of_one_field_preserves_the_other_field(
     )
 
 
+def test_ai_chat_can_rename_a_column(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sign_in(client)
+    mock_ai_completion(
+        monkeypatch,
+        json.dumps(
+            {
+                "reply": "I renamed Done to Finished.",
+                "changes": [
+                    {
+                        "operation": "rename_column",
+                        "column_id": "col-done",
+                        "title": "Finished",
+                    }
+                ],
+            }
+        ),
+    )
+
+    response = client.post(
+        "/api/ai/chat",
+        json={"question": "Rename the Done column to Finished."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["changed"] is True
+    renamed_column = next(
+        column
+        for column in response.json()["board"]["columns"]
+        if column["id"] == "col-done"
+    )
+    assert renamed_column["title"] == "Finished"
+    assert client.get("/api/board").json()["columns"][4]["title"] == "Finished"
+
+
 def test_ai_chat_reports_idempotent_move_as_no_change(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -715,6 +768,12 @@ def test_ai_chat_rejects_invalid_changes_without_partial_updates(
                         "operation": "create",
                         "column_id": "col-backlog",
                         "title": "Temporary accepted item",
+                        "details": "This should roll back.",
+                    },
+                    {
+                        "operation": "rename_column",
+                        "column_id": "col-done",
+                        "title": "Temporary Finished",
                     },
                     {
                         "operation": "move",
@@ -742,6 +801,7 @@ def test_ai_chat_rejects_invalid_changes_without_partial_updates(
     [
         '{"reply":"Unsupported operation","changes":[{"operation":"delete","card_id":"card-1"}]}',
         '{"reply":"Unknown column","changes":[{"operation":"create","column_id":"not-a-column","title":"Invalid"}]}',
+        '{"reply":"Unknown column","changes":[{"operation":"rename_column","column_id":"not-a-column","title":"Invalid"}]}',
     ],
 )
 def test_ai_chat_rejects_invalid_model_output(

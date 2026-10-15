@@ -13,7 +13,7 @@ export const NewCardForm = ({ onAdd, disabled }: NewCardFormProps) => {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!formState.title.trim()) {
+    if (!formState.title.trim() || !formState.details.trim()) {
       return;
     }
     if (await onAdd(formState.title.trim(), formState.details.trim())) {
@@ -42,6 +42,7 @@ export const NewCardForm = ({ onAdd, disabled }: NewCardFormProps) => {
               setFormState((prev) => ({ ...prev, details: event.target.value }))
             }
             placeholder="Details"
+            required
             disabled={disabled}
             rows={3}
             className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
@@ -50,7 +51,9 @@ export const NewCardForm = ({ onAdd, disabled }: NewCardFormProps) => {
             <button
               type="submit"
               className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
-              disabled={disabled}
+              disabled={
+                disabled || !formState.title.trim() || !formState.details.trim()
+              }
             >
               Add card
             </button>

@@ -121,6 +121,8 @@ def test_generate_board_assistance_sends_board_and_recent_history(
         '{"reply":"No changes.","changes":[{"operation":"delete","card_id":"card-1"}]}',
         '{"reply":"No changes.","changes":[{"operation":"edit","card_id":"card-1"}]}',
         '{"reply":"No changes.","changes":[{"operation":"create","column_id":"todo","title":"  "}]}',
+        '{"reply":"No changes.","changes":[{"operation":"create","column_id":"todo","title":"Card","details":"  "}]}',
+        '{"reply":"No changes.","changes":[{"operation":"rename_column","column_id":"todo","title":"  "}]}',
         '{"reply":"No changes.","changes":[{"operation":"move","card_id":"card-1","column_id":"todo","position":-1}]}',
     ],
 )

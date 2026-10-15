@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
 
-from backend.ai_models import BoardChange, CreateCardChange, EditCardChange, MoveCardChange
+from backend.ai_models import (
+    BoardChange,
+    CreateCardChange,
+    EditCardChange,
+    MoveCardChange,
+    RenameColumnChange,
+)
 from backend.auth import USERNAME
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -375,6 +381,13 @@ class BoardDatabase:
                         change.position,
                     ):
                         raise ValueError("AI change refers to an unknown card or column.")
+                elif isinstance(change, RenameColumnChange):
+                    cursor = connection.execute(
+                        "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
+                        (change.title, board_id, change.column_id),
+                    )
+                    if cursor.rowcount == 0:
+                        raise ValueError("AI change refers to an unknown column.")
             return self._load_board(connection, board_id)
 
     @staticmethod

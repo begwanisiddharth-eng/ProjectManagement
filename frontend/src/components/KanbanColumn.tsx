@@ -36,18 +36,29 @@ export const KanbanColumn = ({
   const [titleDraft, setTitleDraft] = useState({
     columnId: column.id,
     value: column.title,
+    savedTitle: column.title,
   });
   const title =
-    titleDraft.columnId === column.id ? titleDraft.value : column.title;
+    titleDraft.columnId === column.id && titleDraft.savedTitle === column.title
+      ? titleDraft.value
+      : column.title;
 
   const saveTitle = async () => {
     const nextTitle = title.trim();
     if (!nextTitle || nextTitle === column.title) {
-      setTitleDraft({ columnId: column.id, value: column.title });
+      setTitleDraft({
+        columnId: column.id,
+        value: column.title,
+        savedTitle: column.title,
+      });
       return;
     }
     if (!(await onRename(column.id, nextTitle))) {
-      setTitleDraft({ columnId: column.id, value: column.title });
+      setTitleDraft({
+        columnId: column.id,
+        value: column.title,
+        savedTitle: column.title,
+      });
     }
   };
 
@@ -71,7 +82,11 @@ export const KanbanColumn = ({
           <input
             value={title}
             onChange={(event) =>
-              setTitleDraft({ columnId: column.id, value: event.target.value })
+              setTitleDraft({
+                columnId: column.id,
+                value: event.target.value,
+                savedTitle: column.title,
+              })
             }
             onBlur={saveTitle}
             onKeyDown={(event) => {

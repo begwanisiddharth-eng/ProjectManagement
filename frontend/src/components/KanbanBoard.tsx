@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { BoardChat } from "@/components/BoardChat";
 import { apiFetch } from "@/lib/api";
 import { moveCard, type BoardData } from "@/lib/kanban";
 
@@ -22,8 +23,10 @@ export const KanbanBoard = () => {
   const [logoutError, setLogoutError] = useState("");
   const [boardError, setBoardError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isChatBusy, setIsChatBusy] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const savingRef = useRef(false);
+  const chatBusyRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -61,7 +64,7 @@ export const KanbanBoard = () => {
     request: () => Promise<Response>,
     errorMessage: string
   ): Promise<boolean> => {
-    if (savingRef.current) {
+    if (savingRef.current || chatBusyRef.current) {
       return false;
     }
     savingRef.current = true;
@@ -92,7 +95,7 @@ export const KanbanBoard = () => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id || !board) {
+    if (!over || active.id === over.id || !board || chatBusyRef.current) {
       return;
     }
 
@@ -283,34 +286,44 @@ export const KanbanBoard = () => {
           ) : null}
         </header>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-                onUpdateCard={handleUpdateCard}
-                isSaving={isSaving}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        <div className="grid items-start gap-6 min-[1400px]:grid-cols-[minmax(0,1fr)_340px]">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <section className="grid gap-6 lg:grid-cols-5">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                  onUpdateCard={handleUpdateCard}
+                  isSaving={isSaving || isChatBusy}
+                />
+              ))}
+            </section>
+            <DragOverlay>
+              {activeCard ? (
+                <div className="w-[260px]">
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+          <BoardChat
+            disabled={isSaving}
+            onBoardUpdate={setBoard}
+            onBusyChange={(busy) => {
+              chatBusyRef.current = busy;
+              setIsChatBusy(busy);
+            }}
+          />
+        </div>
       </main>
     </div>
   );

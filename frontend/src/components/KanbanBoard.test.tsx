@@ -7,6 +7,8 @@ import { initialData, type BoardData } from "@/lib/kanban";
 let board: BoardData;
 let failNextColumnRename: boolean;
 let failBoardLoad: boolean;
+let failAIChat: boolean;
+let aiChatRequest: { question: string; history: unknown[] } | null;
 
 const response = (ok = true): Response =>
   ({
@@ -22,6 +24,8 @@ describe("KanbanBoard", () => {
     board = JSON.parse(JSON.stringify(initialData)) as BoardData;
     failNextColumnRename = false;
     failBoardLoad = false;
+    failAIChat = false;
+    aiChatRequest = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -29,6 +33,27 @@ describe("KanbanBoard", () => {
         const method = init?.method ?? "GET";
         if (path === "/api/board" && method === "GET") {
           return response(!failBoardLoad);
+        }
+        if (path === "/api/ai/chat" && method === "POST") {
+          aiChatRequest = JSON.parse(String(init?.body)) as {
+            question: string;
+            history: unknown[];
+          };
+          if (failAIChat) {
+            return {
+              ok: false,
+              json: async () => ({ detail: "Assistant is not configured." }),
+            } as Response;
+          }
+          board.cards["card-1"].title = "Roadmap refined by AI";
+          board.columns[4].title = "Finished by AI";
+          return {
+            ok: true,
+            json: async () => ({
+              reply: "I updated the roadmap card.",
+              board: JSON.parse(JSON.stringify(board)),
+            }),
+          } as Response;
         }
         if (path.startsWith("/api/board/columns/") && method === "PATCH") {
           if (failNextColumnRename) {
@@ -169,6 +194,33 @@ describe("KanbanBoard", () => {
     );
   });
 
+  it("prevents adding a card without nonblank details", async () => {
+    render(<KanbanBoard />);
+    const column = await getFirstColumn();
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add a card/i })
+    );
+    await userEvent.type(
+      within(column).getByPlaceholderText(/card title/i),
+      "Title only"
+    );
+
+    expect(
+      within(column).getByRole("button", { name: /add card/i })
+    ).toBeDisabled();
+    await userEvent.type(
+      within(column).getByPlaceholderText(/details/i),
+      "   "
+    );
+    expect(
+      within(column).getByRole("button", { name: /add card/i })
+    ).toBeDisabled();
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/cards"),
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("shows the empty-column state after its cards are removed", async () => {
     render(<KanbanBoard />);
     const column = await getFirstColumn();
@@ -200,5 +252,81 @@ describe("KanbanBoard", () => {
       "/api/board/cards/card-1",
       expect.objectContaining({ method: "PATCH" })
     );
+  });
+
+  it("sends a chat message and reflects the returned board without reloading", async () => {
+    render(<KanbanBoard />);
+    await userEvent.click(await screen.findByRole("button", { name: "Board chat" }));
+    const input = await screen.findByRole("textbox", {
+      name: "Ask the board assistant",
+    });
+    await userEvent.type(input, "Rename the roadmap card");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("I updated the roadmap card.")).toBeInTheDocument();
+    expect(await screen.findByText("Roadmap refined by AI")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("column-col-done")).getByLabelText("Column title")
+    ).toHaveValue("Finished by AI");
+    expect(aiChatRequest).toEqual({
+      question: "Rename the roadmap card",
+      history: [],
+    });
+  });
+
+  it("prevents empty chat submissions", async () => {
+    render(<KanbanBoard />);
+    await userEvent.click(await screen.findByRole("button", { name: "Board chat" }));
+    const sendButton = await screen.findByRole("button", { name: "Send" });
+
+    expect(sendButton).toBeDisabled();
+    expect(aiChatRequest).toBeNull();
+  });
+
+  it("shows pending feedback and disables board editing during a chat request", async () => {
+    let finishChat: ((value: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) === "/api/board" && !init?.method) {
+        return response();
+      }
+      if (String(input) === "/api/ai/chat") {
+        return new Promise<Response>((resolve) => {
+          finishChat = resolve;
+        });
+      }
+      return response(false);
+    });
+    render(<KanbanBoard />);
+    await userEvent.click(await screen.findByRole("button", { name: "Board chat" }));
+    const input = await screen.findByRole("textbox", {
+      name: "Ask the board assistant",
+    });
+    await userEvent.type(input, "Summarize the board");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Thinking...")).toBeInTheDocument();
+    expect(within(await getFirstColumn()).getByLabelText("Column title")).toBeDisabled();
+
+    finishChat?.({
+      ok: true,
+      json: async () => ({ reply: "Here is the summary.", board }),
+    } as Response);
+    expect(await screen.findByText("Here is the summary.")).toBeInTheDocument();
+  });
+
+  it("shows the AI API error and keeps the question available to retry", async () => {
+    failAIChat = true;
+    render(<KanbanBoard />);
+    await userEvent.click(await screen.findByRole("button", { name: "Board chat" }));
+    const input = await screen.findByRole("textbox", {
+      name: "Ask the board assistant",
+    });
+    await userEvent.type(input, "Move the analytics card");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Assistant is not configured."
+    );
+    expect(input).toHaveValue("Move the analytics card");
   });
 });
