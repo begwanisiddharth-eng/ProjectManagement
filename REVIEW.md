@@ -1,7 +1,7 @@
 # Kanban Studio -- Comprehensive E2E Review
 
-**Date:** 2026-10-16
-**Branch:** main (commit 8236ec9)
+**Date:** 2026-10-16 (updated after UI polish + code simplification)
+**Branch:** main (commit 6680e49)
 
 ## Automated Test Results
 
@@ -49,16 +49,20 @@ Tested with Chrome via browser automation against `http://127.0.0.1:8000/`:
 
 **None.** The application is functionally correct across all tested paths.
 
-## UI/UX Observations (improvement candidates for next iteration)
+## UI/UX Observations
 
-1. **Card titles break mid-word** on the default viewport. The 5-column grid plus chat
-   sidebar leaves each column ~170px wide, causing `break-words` to split normal words
-   like "Prototype" into "Prototy pe". The columns need a minimum width or the layout
-   should scroll horizontally.
-2. **Checklist input placeholder truncated.** "Add checklist item" renders as "Add chec"
-   in narrow columns.
-3. **No horizontal scroll on small screens.** The 5-column layout compresses rather than
-   scrolling below ~1400px viewport width.
+### Fixed in this iteration (commit 6680e49)
+
+1. ~~Card titles break mid-word~~ -- **Fixed.** Columns are now 260px fixed-width with
+   a horizontal scroll container. Titles like "Prototype analytics view" display
+   without mid-word breaks.
+2. ~~Checklist input placeholder truncated~~ -- **Fixed.** "Add checklist item" is now
+   fully visible with the wider column width.
+3. ~~No horizontal scroll on small screens~~ -- **Fixed.** The board now uses a flex
+   row with `overflow-x-auto`; columns scroll horizontally rather than compressing.
+
+### Remaining (minor, not blockers)
+
 4. **Board delete has no confirmation dialog.** The "Delete" button on the board bar
    fires the delete immediately.
 5. **No per-operation loading indicator.** Saving/deleting only disables controls (opacity
@@ -93,9 +97,40 @@ Tested with Chrome via browser automation against `http://127.0.0.1:8000/`:
 - Expired sessions are cleaned lazily (on access), not periodically. Fine for MVP.
 - `BoardChat` uses index-based React keys, safe since messages are append-only.
 
+## Changes Since First Review (commits 8593e32, 6680e49)
+
+### Code simplification (8593e32)
+
+- Sorted stdlib imports in `database.py` (bare imports first).
+- Replaced `1 if done else 0` with `int(done)` in `set_checklist_item`.
+- Extracted `cardPath(cardId)` helper in `KanbanBoard.tsx` (removes 6 duplicated URL
+  constructions).
+- Aligned `test_checklist.py` helpers to match `test_main.py` convention (separate
+  `sign_in` and `board_id` functions).
+
+### UI polish (6680e49)
+
+- Replaced `grid lg:grid-cols-5` column layout with `flex overflow-x-auto` and 260px
+  fixed-width columns.
+- Removed `break-words` from card titles and details (no longer needed at 260px width).
+- Removed `break-words` from checklist item text.
+
+### Post-change verification
+
+All 121 automated tests pass after both changes:
+
+| Suite | Result |
+|---|---|
+| Backend | 83 passed, 1 skipped |
+| Frontend unit | 24 passed |
+| Playwright E2E | 14 passed |
+
+Manual browser walkthrough confirmed: card titles wrap naturally, checklist placeholder
+visible, horizontal scroll reaches the 5th column, drag-and-drop still works.
+
 ## Verdict
 
 The application is **production-ready for its MVP scope**. All 121 automated tests pass,
-all manual edge cases behave correctly, and the codebase is well-structured with proper
-security practices. The UI/UX observations above are polish items for the next iteration,
-not blockers.
+all manual edge cases behave correctly, the codebase has been simplified, and the UI
+layout issues have been resolved. The two remaining UI observations (delete confirmation,
+loading indicators) are minor polish items, not blockers.
