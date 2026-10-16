@@ -147,7 +147,7 @@ export const KanbanCard = ({
       ) : (
         <div className="group flex min-w-0 flex-col gap-2">
           <div className="flex items-start justify-between gap-2">
-            <h4 className="min-w-0 break-words font-display text-base font-semibold leading-6 text-[var(--navy-dark)]">
+            <h4 className="min-w-0 font-display text-base font-semibold leading-6 text-[var(--navy-dark)]">
               {card.title}
             </h4>
             <div className="flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
@@ -198,7 +198,7 @@ export const KanbanCard = ({
             </div>
           </div>
           {card.details ? (
-            <p className="min-w-0 break-words text-sm leading-6 text-[var(--gray-text)]">
+            <p className="min-w-0 text-sm leading-6 text-[var(--gray-text)]">
               {card.details}
             </p>
           ) : null}

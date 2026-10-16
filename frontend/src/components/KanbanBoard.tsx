@@ -475,7 +475,7 @@ export const KanbanBoard = () => {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <section className="grid gap-6 lg:grid-cols-5">
+            <section className="flex gap-6 overflow-x-auto pb-2">
               {board.columns.map((column, index) => (
                 <KanbanColumn
                   key={column.id}

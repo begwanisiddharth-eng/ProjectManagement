@@ -50,7 +50,7 @@ export const CardChecklist = ({
               aria-label={item.text}
             />
             <span
-              className={`min-w-0 flex-1 break-words text-sm ${
+              className={`min-w-0 flex-1 text-sm ${
                 item.done
                   ? "text-[var(--gray-text)] line-through"
                   : "text-[var(--navy-dark)]"
