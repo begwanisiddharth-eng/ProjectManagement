@@ -323,3 +323,26 @@ docker run -it --rm `
   claude-sandbox `
   claude --dangerously-skip-permissions
 ```
+
+---
+
+## Troubleshooting: Windows deps polluted with Linux builds
+
+Symptom: on Windows, `start.ps1` (or `uv`/`npm`) fails with
+`failed to remove file ...\backend\.venv\lib64: Access is denied`, or
+`npm run build` complains about the wrong platform binary.
+
+Cause: a container launched **without** the shadow-volume mounts wrote a Linux
+venv / `node_modules` straight into your project folder through the bind mount.
+Windows tools then choke on the Linux symlinks (`lib64 -> lib`) and native
+packages (`@next/swc-linux-x64-gnu`). The shadow volumes in Step 4 prevent this;
+always include them.
+
+Fix (run in Git Bash or WSL, which can delete the Linux symlinks that Windows
+tools cannot, then reinstall natively):
+
+```bash
+cd /c/ClaudeProjects/pm
+rm -rf backend/.venv && uv sync --project backend
+rm -rf frontend/node_modules && (cd frontend && npm ci)
+```
