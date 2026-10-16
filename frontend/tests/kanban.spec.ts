@@ -1,25 +1,46 @@
 import { expect, test } from "@playwright/test";
 
+const columns = '[data-testid^="column-"]';
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/login/");
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await expect(page.locator(columns)).toHaveCount(5);
 });
 
 test("loads the kanban board", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
-  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+  await expect(page.locator(columns)).toHaveCount(5);
   await expect(page.getByRole("button", { name: "Board chat" })).toBeVisible();
+});
+
+test("creates a second board and switches between boards", async ({ page }) => {
+  await page.goto("/");
+  const name = `Launch ${Date.now()}`;
+  await page.getByRole("button", { name: "+ New board" }).click();
+  await page.getByLabel("New board name").fill(name);
+  await page.getByRole("button", { name: "Create board" }).click();
+
+  const newTab = page.getByRole("button", { name });
+  await expect(newTab).toHaveAttribute("aria-current", "true");
+  // The brand-new board starts empty.
+  await expect(page.locator('[data-testid^="card-"]')).toHaveCount(0);
+
+  // Switching back to the seeded board shows its cards again.
+  await page.getByRole("button", { name: "Kanban Studio" }).click();
+  await expect(page.getByTestId("card-card-1")).toBeVisible();
 });
 
 test("shows an assistant reply and applies its returned board update", async ({
   page,
 }) => {
   await page.goto("/");
-  const boardResponse = await page.request.get("/api/board");
+  const boardsResponse = await page.request.get("/api/boards");
+  const boardsList = (await boardsResponse.json()) as { id: string }[];
+  const boardId = boardsList[0].id;
+  const boardResponse = await page.request.get(`/api/boards/${boardId}`);
   const board = (await boardResponse.json()) as {
     columns: unknown[];
     cards: Record<string, { id: string; title: string; details: string }>;
@@ -29,7 +50,7 @@ test("shows an assistant reply and applies its returned board update", async ({
     ...board.columns[4],
     title: "Finished by assistant",
   };
-  await page.route("**/api/ai/chat", (route) =>
+  await page.route("**/api/boards/*/chat", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -58,7 +79,7 @@ test("shows an assistant reply and applies its returned board update", async ({
 
 test("adds a card to a column", async ({ page }) => {
   await page.goto("/");
-  const firstColumn = page.locator('[data-testid^="column-"]').first();
+  const firstColumn = page.locator(columns).first();
   const title = `Playwright card ${Date.now()}`;
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill(title);
@@ -116,7 +137,7 @@ test("shows failed saves and allows retrying the change", async ({ page }) => {
     .getByTestId("column-col-backlog")
     .getByRole("textbox", { name: "Column title" });
   const savedTitle = await titleInput.inputValue();
-  await page.route("**/api/board/columns/col-backlog", (route) =>
+  await page.route("**/api/boards/*/columns/col-backlog", (route) =>
     route.fulfill({ status: 500, body: "save failed" })
   );
 
@@ -127,7 +148,7 @@ test("shows failed saves and allows retrying the change", async ({ page }) => {
   );
   await expect(titleInput).toHaveValue(savedTitle);
 
-  await page.unroute("**/api/board/columns/col-backlog");
+  await page.unroute("**/api/boards/*/columns/col-backlog");
   await titleInput.fill("Retried title");
   await titleInput.press("Enter");
   await expect(titleInput).toHaveValue("Retried title");

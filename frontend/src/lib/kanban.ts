@@ -15,6 +15,13 @@ export type BoardData = {
   cards: Record<string, Card>;
 };
 
+export type BoardSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
 

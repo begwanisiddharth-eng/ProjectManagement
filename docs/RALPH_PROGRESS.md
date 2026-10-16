@@ -15,7 +15,7 @@ increment so later iterations can build on git history.
 2. [DONE] Multiple boards (backend): board CRUD, board-scoped routes
    `/api/boards/{board_id}/...`, ownership checks, migration v3 (drop one-board
    constraint, add board ordering). Refactor DB methods to take board_id.
-3. [ ] Frontend: registration page; board list / switcher / create / rename /
+3. [DONE] Frontend: registration page; board list / switcher / create / rename /
    delete; wire board-scoped API.
 4. [ ] Card enrichment (backend + frontend): priority, labels, due date, assignee;
    board search/filter.
@@ -41,5 +41,15 @@ increment so later iterations can build on git history.
   68 passed, 1 skipped.
 - IMPORTANT for next iter: the FRONTEND still calls the old `/api/board*` paths,
   so the app UI and Playwright e2e are currently out of sync with the API.
-- Next (Iter 3): frontend — registration page, board switcher/CRUD, wire
-  board-scoped API; then update Playwright e2e.
+- Iter 3 [DONE]: frontend. New `BoardBar` (board tabs + create/rename/delete),
+  `RegisterForm` + `/register` page, login<->register links. `KanbanBoard` now
+  loads `/api/boards`, tracks a current board, and routes every card/column/chat
+  call through `/api/boards/{id}/...`; `BoardChat` takes a `boardId`. Rewrote
+  `KanbanBoard.test.tsx` (14) for the board-scoped mock + switcher, added
+  `RegisterForm.test.tsx` (4). Updated Playwright specs (auth + kanban) to the
+  new UI/API and added register + multi-board e2e tests. Frontend: 21 unit tests
+  pass, lint clean, `npm run build` exports `/`, `/login`, `/register`.
+- NOTE: loop capped at 6 iterations per user request (was 10).
+- NOTE: Playwright browser was not cached; installing chromium to run e2e.
+- Next (Iter 4): card enrichment (priority/labels/due date) backend + frontend,
+  and/or board search; keep coverage strong.

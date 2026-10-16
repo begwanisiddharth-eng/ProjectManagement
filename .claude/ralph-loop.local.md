@@ -2,7 +2,7 @@
 active: true
 iteration: 1
 session_id: 99ceb481-e2fc-48be-92c0-30ffabd282b8
-max_iterations: 10
+max_iterations: 6
 completion_promise: null
 started_at: "2026-10-16T03:42:49Z"
 ---

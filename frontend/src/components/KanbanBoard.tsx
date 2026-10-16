@@ -14,8 +14,9 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardChat } from "@/components/BoardChat";
+import { BoardBar } from "@/components/BoardBar";
 import { apiFetch } from "@/lib/api";
-import { moveCard, type BoardData } from "@/lib/kanban";
+import { moveCard, type BoardData, type BoardSummary } from "@/lib/kanban";
 
 const COLUMN_ACCENTS = [
   "var(--accent-yellow)",
@@ -26,6 +27,8 @@ const COLUMN_ACCENTS = [
 ];
 
 export const KanbanBoard = () => {
+  const [boards, setBoards] = useState<BoardSummary[] | null>(null);
+  const [currentBoardId, setCurrentBoardId] = useState<string | null>(null);
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [logoutError, setLogoutError] = useState("");
@@ -44,7 +47,40 @@ export const KanbanBoard = () => {
 
   useEffect(() => {
     let isMounted = true;
-    apiFetch("/api/board")
+    apiFetch("/api/boards")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load your boards.");
+        }
+        const loadedBoards: BoardSummary[] = await response.json();
+        if (isMounted) {
+          setBoards(loadedBoards);
+          setCurrentBoardId((current) =>
+            current && loadedBoards.some((item) => item.id === current)
+              ? current
+              : (loadedBoards[0]?.id ?? null)
+          );
+          setBoardError("");
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBoardError("Unable to load your boards. Check the server and retry.");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [loadAttempt]);
+
+  useEffect(() => {
+    if (!currentBoardId) {
+      return;
+    }
+    let isMounted = true;
+    setBoard(null);
+    apiFetch(`/api/boards/${encodeURIComponent(currentBoardId)}`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("Unable to load the board.");
@@ -64,9 +100,12 @@ export const KanbanBoard = () => {
     return () => {
       isMounted = false;
     };
-  }, [loadAttempt]);
+  }, [currentBoardId, loadAttempt]);
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
+  const boardBasePath = currentBoardId
+    ? `/api/boards/${encodeURIComponent(currentBoardId)}`
+    : "";
 
   const saveBoardChange = async (
     request: () => Promise<Response>,
@@ -127,7 +166,7 @@ export const KanbanBoard = () => {
     }
     void saveBoardChange(
       () =>
-        apiFetch(`/api/board/cards/${encodeURIComponent(cardId)}/move`, {
+        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}/move`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -142,7 +181,7 @@ export const KanbanBoard = () => {
   const handleRenameColumn = (columnId: string, title: string) =>
     saveBoardChange(
       () =>
-        apiFetch(`/api/board/columns/${encodeURIComponent(columnId)}`, {
+        apiFetch(`${boardBasePath}/columns/${encodeURIComponent(columnId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: title.trim() }),
@@ -154,7 +193,7 @@ export const KanbanBoard = () => {
     saveBoardChange(
       () =>
         apiFetch(
-          `/api/board/columns/${encodeURIComponent(columnId)}/cards`,
+          `${boardBasePath}/columns/${encodeURIComponent(columnId)}/cards`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -167,7 +206,7 @@ export const KanbanBoard = () => {
   const handleUpdateCard = (cardId: string, title: string, details: string) =>
     saveBoardChange(
       () =>
-        apiFetch(`/api/board/cards/${encodeURIComponent(cardId)}`, {
+        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, details }),
@@ -178,11 +217,86 @@ export const KanbanBoard = () => {
   const handleDeleteCard = (cardId: string) =>
     saveBoardChange(
       () =>
-        apiFetch(`/api/board/cards/${encodeURIComponent(cardId)}`, {
+        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}`, {
           method: "DELETE",
         }),
       "Unable to remove card. The board was not changed."
     );
+
+  const handleCreateBoard = async (title: string): Promise<boolean> => {
+    setBoardError("");
+    try {
+      const response = await apiFetch("/api/boards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!response.ok) {
+        throw new Error("rejected");
+      }
+      const summary: BoardSummary = await response.json();
+      setBoards((current) => [...(current ?? []), summary]);
+      setCurrentBoardId(summary.id);
+      return true;
+    } catch {
+      setBoardError("Unable to create the board. Please try again.");
+      return false;
+    }
+  };
+
+  const handleRenameBoard = async (
+    boardId: string,
+    title: string
+  ): Promise<boolean> => {
+    setBoardError("");
+    try {
+      const response = await apiFetch(
+        `/api/boards/${encodeURIComponent(boardId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error("rejected");
+      }
+      const summary: BoardSummary = await response.json();
+      setBoards((current) =>
+        (current ?? []).map((item) => (item.id === summary.id ? summary : item))
+      );
+      return true;
+    } catch {
+      setBoardError("Unable to rename the board. Please try again.");
+      return false;
+    }
+  };
+
+  const handleDeleteBoard = async (boardId: string) => {
+    setBoardError("");
+    try {
+      const response = await apiFetch(
+        `/api/boards/${encodeURIComponent(boardId)}`,
+        { method: "DELETE" }
+      );
+      if (response.status === 409) {
+        setBoardError("You cannot delete your only board.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("rejected");
+      }
+      setBoards((current) => {
+        const remaining = (current ?? []).filter((item) => item.id !== boardId);
+        setCurrentBoardId((active) =>
+          active === boardId ? (remaining[0]?.id ?? null) : active
+        );
+        return remaining;
+      });
+    } catch {
+      setBoardError("Unable to delete the board. Please try again.");
+    }
+  };
 
   const handleRetryLoad = () => {
     setBoard(null);
@@ -239,14 +353,23 @@ export const KanbanBoard = () => {
 
       <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
         <header className="flex flex-col gap-4 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-6 shadow-[var(--shadow)] backdrop-blur sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-5">
+          <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--navy-dark)] sm:text-4xl">
                 Kanban Studio
-              </h1>
+              </p>
+              <div className="mt-3">
+                <BoardBar
+                  key={currentBoardId ?? "none"}
+                  boards={boards ?? []}
+                  currentBoardId={currentBoardId}
+                  disabled={isSaving || isChatBusy}
+                  onSelect={setCurrentBoardId}
+                  onCreate={handleCreateBoard}
+                  onRename={handleRenameBoard}
+                  onDelete={handleDeleteBoard}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 rounded-full border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2">
@@ -323,6 +446,7 @@ export const KanbanBoard = () => {
             </DragOverlay>
           </DndContext>
           <BoardChat
+            boardId={currentBoardId ?? ""}
             disabled={isSaving}
             onBoardUpdate={setBoard}
             onBusyChange={(busy) => {
