@@ -13,11 +13,11 @@ from backend.ai_models import (
     MoveCardChange,
     RenameColumnChange,
 )
-from backend.auth import USERNAME
+from backend.auth import PASSWORD, USERNAME, hash_password, verify_password
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_DATABASE_PATH = ROOT_DIR / ".data" / "kanban.sqlite3"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_COLUMNS = (
     ("col-backlog", "Backlog"),
     ("col-discovery", "Discovery"),
@@ -69,6 +69,9 @@ MIGRATION_1 = (
         FOREIGN KEY (board_id, column_id)
             REFERENCES columns(board_id, id) ON DELETE CASCADE
     )""",
+)
+MIGRATION_2 = (
+    "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
 )
 
 
@@ -124,19 +127,32 @@ class BoardDatabase:
                     "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
                     (1, timestamp()),
                 )
+            if current_version < 2:
+                for statement in MIGRATION_2:
+                    connection.execute(statement)
+                connection.execute(
+                    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                    (2, timestamp()),
+                )
             self._seed_mvp_board(connection)
 
     def _seed_mvp_board(self, connection: sqlite3.Connection) -> None:
         now = timestamp()
         connection.execute(
-            "INSERT OR IGNORE INTO users (id, username, created_at) VALUES (?, ?, ?)",
-            ("local-user", USERNAME, now),
+            """INSERT OR IGNORE INTO users (id, username, password_hash, created_at)
+            VALUES (?, ?, ?, ?)""",
+            ("local-user", USERNAME, hash_password(PASSWORD), now),
         )
         user = connection.execute(
-            "SELECT id FROM users WHERE username = ?", (USERNAME,)
+            "SELECT id, password_hash FROM users WHERE username = ?", (USERNAME,)
         ).fetchone()
         if user is None:
             raise RuntimeError("Unable to find the MVP user after initialization.")
+        if not user["password_hash"]:
+            connection.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (hash_password(PASSWORD), user["id"]),
+            )
 
         existing_board = connection.execute(
             "SELECT id FROM boards WHERE user_id = ?", (user["id"],)
@@ -150,13 +166,7 @@ class BoardDatabase:
             VALUES (?, ?, ?, ?, ?)""",
             (board_id, user["id"], "Kanban Studio", now, now),
         )
-        connection.executemany(
-            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
-            [
-                (column_id, board_id, title, position)
-                for position, (column_id, title) in enumerate(DEFAULT_COLUMNS)
-            ],
-        )
+        self._seed_columns(connection, board_id)
         positions: dict[str, int] = {}
         for card_id, column_id, title, details in DEFAULT_CARDS:
             position = positions.get(column_id, 0)
@@ -167,6 +177,48 @@ class BoardDatabase:
                 (card_id, board_id, column_id, title, details, position, now, now),
             )
             positions[column_id] = position + 1
+
+    @staticmethod
+    def _seed_columns(connection: sqlite3.Connection, board_id: str) -> None:
+        connection.executemany(
+            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+            [
+                (column_id, board_id, title, position)
+                for position, (column_id, title) in enumerate(DEFAULT_COLUMNS)
+            ],
+        )
+
+    def create_user(self, username: str, password: str) -> str | None:
+        """Create a user with a seeded default board. Return the id, or None if taken."""
+        with self.connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if existing is not None:
+                return None
+            now = timestamp()
+            user_id = str(uuid4())
+            connection.execute(
+                """INSERT INTO users (id, username, password_hash, created_at)
+                VALUES (?, ?, ?, ?)""",
+                (user_id, username, hash_password(password), now),
+            )
+            board_id = str(uuid4())
+            connection.execute(
+                """INSERT INTO boards (id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)""",
+                (board_id, user_id, "My Board", now, now),
+            )
+            self._seed_columns(connection, board_id)
+            return user_id
+
+    def authenticate(self, username: str, password: str) -> bool:
+        """Return True when the username exists and the password matches its hash."""
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT password_hash FROM users WHERE username = ?", (username,)
+            ).fetchone()
+        return row is not None and verify_password(password, row["password_hash"])
 
     @staticmethod
     def _board_id(connection: sqlite3.Connection, username: str) -> str | None:

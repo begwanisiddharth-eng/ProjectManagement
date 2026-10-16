@@ -4,6 +4,10 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
+Username = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=3, max_length=50)
+]
+Password = Annotated[str, StringConstraints(min_length=8, max_length=200)]
 BoardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 CardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 CardDetails = Annotated[str, StringConstraints(max_length=4000)]
@@ -15,6 +19,11 @@ RequiredCardDetails = Annotated[
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    username: Username
+    password: Password
 
 
 class ColumnRename(BaseModel):

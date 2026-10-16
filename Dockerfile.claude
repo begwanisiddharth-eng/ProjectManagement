@@ -1,0 +1,53 @@
+FROM node:22-bookworm
+
+# Base tools your project needs: git, plus build essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
+        curl \
+        ripgrep \
+        less \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv (your Python package manager) - installed to /usr/local/bin so it's on PATH
+RUN curl -LsSf https://astral.sh/uv/install.sh | \
+    env UV_INSTALL_DIR=/usr/local/bin sh
+
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Playwright: Chromium + its system libraries, baked in while we are still root
+# (the dev user has no sudo). Browsers go to a shared path both users can read,
+# so e2e tests run without a per-launch download. Keep the version in sync with
+# frontend/package.json (@playwright/test).
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx -y playwright@1.58.0 install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright
+
+# Non-root user matching a typical uid so mounted files stay writable
+RUN userdel -r node 2>/dev/null || true
+RUN useradd -m -s /bin/bash -u 1000 dev
+USER dev
+WORKDIR /work
+
+# Pre-create the dependency mount points as dev. The shadow volumes
+# (claude-pm-node, claude-pm-venv) mount here; a fresh named volume inherits the
+# ownership of this image path, so creating them as dev makes npm ci / uv sync
+# writable. Without this they would be root-owned and the install would fail.
+RUN mkdir -p /work/frontend/node_modules /work/backend/.venv
+
+# Treat CRLF working-tree files as LF when diffing, so a Windows-authored tree
+# (CRLF) does not show every file as modified against LF commits. Sandbox-local;
+# does not rewrite any files.
+RUN git config --global core.autocrlf input
+
+# Claude config/credentials live here; we mount a volume over it to persist
+# login. Create it as dev FIRST so the named volume inherits dev ownership and
+# the credentials file is writable (otherwise the mount point is root-owned).
+RUN mkdir -p /home/dev/.claude
+ENV CLAUDE_CONFIG_DIR=/home/dev/.claude
+
+CMD ["bash"]
+
+
+

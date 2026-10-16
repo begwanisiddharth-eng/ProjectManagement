@@ -9,6 +9,7 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  accent: string;
   onRename: (columnId: string, title: string) => Promise<boolean>;
   onAddCard: (columnId: string, title: string, details: string) => Promise<boolean>;
   onDeleteCard: (cardId: string) => Promise<boolean>;
@@ -23,6 +24,7 @@ type KanbanColumnProps = {
 export const KanbanColumn = ({
   column,
   cards,
+  accent,
   onRename,
   onAddCard,
   onDeleteCard,
@@ -55,19 +57,14 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
+        "flex min-h-[520px] flex-col overflow-hidden rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] shadow-[var(--shadow)] transition",
         isOver && "ring-2 ring-[var(--accent-yellow)]"
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
-            </span>
-          </div>
+      <div className="h-1.5 w-full" style={{ backgroundColor: accent }} />
+      <div className="flex flex-col p-4">
+        <div className="flex items-center gap-2">
           <input
             value={title}
             onChange={(event) =>
@@ -80,12 +77,15 @@ export const KanbanColumn = ({
               }
             }}
             disabled={isSaving}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
+            className="min-w-0 flex-1 rounded-lg bg-transparent px-1 py-0.5 font-display text-lg font-semibold text-[var(--navy-dark)] outline-none transition focus:bg-[var(--surface)]"
             aria-label="Column title"
           />
+          <span className="shrink-0 rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--gray-text)]">
+            {cards.length}
+          </span>
         </div>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div className="flex flex-1 flex-col gap-3 px-4 pb-4">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
@@ -103,10 +103,12 @@ export const KanbanColumn = ({
           </div>
         )}
       </div>
-      <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
-        disabled={isSaving}
-      />
+      <div className="px-4 pb-4">
+        <NewCardForm
+          onAdd={(title, details) => onAddCard(column.id, title, details)}
+          disabled={isSaving}
+        />
+      </div>
     </section>
   );
 };
