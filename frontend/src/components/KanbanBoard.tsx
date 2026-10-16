@@ -112,6 +112,9 @@ export const KanbanBoard = () => {
     ? `/api/boards/${encodeURIComponent(currentBoardId)}`
     : "";
 
+  const cardPath = (cardId: string) =>
+    `${boardBasePath}/cards/${encodeURIComponent(cardId)}`;
+
   const saveBoardChange = async (
     request: () => Promise<Response>,
     errorMessage: string
@@ -171,7 +174,7 @@ export const KanbanBoard = () => {
     }
     void saveBoardChange(
       () =>
-        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}/move`, {
+        apiFetch(`${cardPath(cardId)}/move`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -223,7 +226,7 @@ export const KanbanBoard = () => {
   ) =>
     saveBoardChange(
       () =>
-        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}`, {
+        apiFetch(cardPath(cardId), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, details, priority, due_date: dueDate }),
@@ -234,9 +237,7 @@ export const KanbanBoard = () => {
   const handleDeleteCard = (cardId: string) =>
     saveBoardChange(
       () =>
-        apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}`, {
-          method: "DELETE",
-        }),
+        apiFetch(cardPath(cardId), { method: "DELETE" }),
       "Unable to remove card. The board was not changed."
     );
 
@@ -244,23 +245,18 @@ export const KanbanBoard = () => {
     onAdd: (cardId: string, text: string) =>
       saveBoardChange(
         () =>
-          apiFetch(
-            `${boardBasePath}/cards/${encodeURIComponent(cardId)}/checklist`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text }),
-            }
-          ),
+          apiFetch(`${cardPath(cardId)}/checklist`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          }),
         "Unable to add checklist item. The board was not changed."
       ),
     onToggle: (cardId: string, itemId: string, done: boolean) =>
       saveBoardChange(
         () =>
           apiFetch(
-            `${boardBasePath}/cards/${encodeURIComponent(
-              cardId
-            )}/checklist/${encodeURIComponent(itemId)}`,
+            `${cardPath(cardId)}/checklist/${encodeURIComponent(itemId)}`,
             {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
@@ -273,9 +269,7 @@ export const KanbanBoard = () => {
       saveBoardChange(
         () =>
           apiFetch(
-            `${boardBasePath}/cards/${encodeURIComponent(
-              cardId
-            )}/checklist/${encodeURIComponent(itemId)}`,
+            `${cardPath(cardId)}/checklist/${encodeURIComponent(itemId)}`,
             { method: "DELETE" }
           ),
         "Unable to remove checklist item. The board was not changed."

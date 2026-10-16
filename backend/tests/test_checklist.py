@@ -3,18 +3,23 @@
 from fastapi.testclient import TestClient
 
 
-def sign_in(client: TestClient) -> str:
-    assert (
-        client.post(
-            "/api/auth/login", json={"username": "user", "password": "password"}
-        ).status_code
-        == 200
+def sign_in(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "user", "password": "password"},
     )
-    return client.get("/api/boards").json()[0]["id"]
+    assert response.status_code == 200
+
+
+def board_id(client: TestClient) -> str:
+    response = client.get("/api/boards")
+    assert response.status_code == 200
+    return response.json()[0]["id"]
 
 
 def test_seeded_cards_start_with_an_empty_checklist(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     card = client.get(f"/api/boards/{bid}").json()["cards"]["card-1"]
 
@@ -22,7 +27,8 @@ def test_seeded_cards_start_with_an_empty_checklist(client: TestClient) -> None:
 
 
 def test_add_checklist_item_appends_in_order(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     client.post(
         f"/api/boards/{bid}/cards/card-1/checklist", json={"text": "First step"}
@@ -38,7 +44,8 @@ def test_add_checklist_item_appends_in_order(client: TestClient) -> None:
 
 
 def test_toggle_checklist_item_marks_it_done(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
     item_id = (
         client.post(
             f"/api/boards/{bid}/cards/card-1/checklist", json={"text": "Do it"}
@@ -55,7 +62,8 @@ def test_toggle_checklist_item_marks_it_done(client: TestClient) -> None:
 
 
 def test_delete_checklist_item_removes_it(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
     item_id = (
         client.post(
             f"/api/boards/{bid}/cards/card-1/checklist", json={"text": "Remove me"}
@@ -72,7 +80,8 @@ def test_delete_checklist_item_removes_it(client: TestClient) -> None:
 
 
 def test_checklist_rejects_blank_text(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     response = client.post(
         f"/api/boards/{bid}/cards/card-1/checklist", json={"text": "   "}
@@ -82,7 +91,8 @@ def test_checklist_rejects_blank_text(client: TestClient) -> None:
 
 
 def test_checklist_add_on_unknown_card_is_404(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     response = client.post(
         f"/api/boards/{bid}/cards/missing-card/checklist", json={"text": "Step"}
@@ -92,7 +102,8 @@ def test_checklist_add_on_unknown_card_is_404(client: TestClient) -> None:
 
 
 def test_checklist_toggle_on_unknown_item_is_404(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     response = client.patch(
         f"/api/boards/{bid}/cards/card-1/checklist/missing-item",
@@ -103,7 +114,8 @@ def test_checklist_toggle_on_unknown_item_is_404(client: TestClient) -> None:
 
 
 def test_deleting_a_card_removes_its_checklist(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
     client.post(
         f"/api/boards/{bid}/cards/card-1/checklist", json={"text": "Cascade me"}
     )
@@ -119,7 +131,8 @@ def test_deleting_a_card_removes_its_checklist(client: TestClient) -> None:
 
 
 def test_checklist_is_scoped_to_its_owner(client: TestClient) -> None:
-    bid = sign_in(client)
+    sign_in(client)
+    bid = board_id(client)
 
     # Another user cannot touch this board's cards.
     assert (

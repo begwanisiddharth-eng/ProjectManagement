@@ -1,7 +1,7 @@
+import os
+import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
-import sqlite3
-import os
 from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
@@ -580,7 +580,7 @@ class BoardDatabase:
             cursor = connection.execute(
                 """UPDATE card_checklist_items SET done = ?
                 WHERE board_id = ? AND card_id = ? AND id = ?""",
-                (1 if done else 0, board_id, card_id, item_id),
+                (int(done), board_id, card_id, item_id),
             )
             return self._load_board(connection, board_id) if cursor.rowcount else None
 

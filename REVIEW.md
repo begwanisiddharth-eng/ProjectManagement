@@ -1,100 +1,101 @@
-# End-to-end review
+# Kanban Studio -- Comprehensive E2E Review
 
-Final comprehensive end-to-end validation of the Kanban Studio MVP, run on 2026-10-15,
-after the backend route refactor that split `main.py` into focused modules
-(`schemas.py`, `dependencies.py`, `auth_routes.py`, `board_routes.py`, `ai_routes.py`).
+**Date:** 2026-10-16
+**Branch:** main (commit 8236ec9)
 
-## Summary
+## Automated Test Results
 
-All layers pass. No defects were found. Backend, frontend, production build, browser
-tests, and a live smoke test of the running server all succeed, including the live Groq
-AI path through the refactored `ai_routes.py`. The findings below are observations and
-known limitations, not bugs.
+| Suite | Result |
+|---|---|
+| Backend (`uv run --project backend pytest`) | 83 passed, 1 skipped |
+| Frontend unit (`npm run test:unit`) | 24 passed (3 files) |
+| Playwright E2E (`npm run test:e2e`) | 14 passed |
 
-## Environment
+All three suites green. No flaky tests observed. The one skipped test is the opt-in
+live-Groq connectivity check (`test_ai_live.py`), which runs only with
+`RUN_GROQ_CONNECTIVITY=1` and a valid `GROQ_API_KEY`.
 
-- Windows 10 Pro, PowerShell start/stop scripts.
-- Python 3.13.14, pytest 9.1.1, managed with `uv` (73 packages, lock in sync).
-- Next.js 16.1.6 (Turbopack), React 19.2.3, Vitest 3.2.4, Playwright (Chromium).
+## Manual API Edge-Case Testing
 
-## Automated suites
+| Scenario | Expected | Actual |
+|---|---|---|
+| Empty card title | 422 | 422 |
+| Whitespace-only card title | 422 (strip then reject) | 422 |
+| Missing required `details` field | 422 | 422 |
+| Invalid priority value (`"critical"`) | 422 | 422 |
+| Invalid due-date format (`"not-a-date"`) | 422 | 422 |
+| Unauthenticated GET `/api/boards` | 401 | 401 |
+| Forged session cookie | 401 | 401 |
+| Nonexistent board ID | 404 | 404 |
+| Nonexistent column ID (card create) | 404 | 404 |
+| Delete the only board | 409 | 409 |
+| XSS in card title (`<script>`) | Stored; React escapes on render | Correct |
 
-| Check | Command | Result |
-| --- | --- | --- |
-| Backend tests | `uv run --project backend pytest` | 47 passed, 1 skipped (11.2s) |
-| Frontend lint | `npm run lint` (eslint) | Clean, no warnings |
-| Frontend unit/component | `npm run test:unit` (vitest) | 15 passed, 2 files (9.6s) |
-| Production build | `npm run build` (next build) | Success; static export of `/`, `/login`, `/_not-found` |
-| Browser e2e | `npm run test:e2e` (playwright) | 11 passed (~1 min) |
-| Dependency lock | `uv lock --project backend --check` | In sync |
-| Whitespace | `git diff --check` | No errors (only CRLF conversion notices) |
+No bugs found in API validation or authorization.
 
-The one skipped backend test is the opt-in live-Groq arithmetic check
-(`test_ai_live.py`), which runs only with `RUN_GROQ_CONNECTIVITY=1` and a key.
+## Manual Browser Walkthrough
 
-### Refactor-specific confirmation
+Tested with Chrome via browser automation against `http://127.0.0.1:8000/`:
 
-The route split moved every handler out of `main.py` into `APIRouter` modules that reach
-the database and session store through `Depends` providers backed by `app.state`. The
-full backend suite (which exercises every endpoint) and the browser suite both pass
-unchanged, and the route table resolves at identical paths. `main.py` is now 63 lines of
-app assembly; behavior and the public API are unchanged.
+- **Login flow:** Redirects unauthenticated users to `/login/`. Sign in with default
+  credentials works; lands on the board with all 5 columns and 8 seeded cards.
+- **Board loads correctly:** Board bar (tabs, new board, rename, delete), card count
+  badge, sign-out button, AI chat panel all render.
+- **No console errors** on page load or navigation.
+- **Register page** accessible from login link; form validates username length (3+),
+  password length (8+), and password confirmation match.
 
-## Live smoke test (running server)
+## Bugs Found
 
-Started with `scripts/start.ps1` (health check passed, served at `127.0.0.1:8000`),
-exercised with real HTTP requests, then stopped with `scripts/stop.ps1` (port released).
+**None.** The application is functionally correct across all tested paths.
 
-| # | Scenario | Expected | Actual |
-| --- | --- | --- | --- |
-| 1 | `GET /api/health` (public) | 200 `{"status":"ok"}` | matched |
-| 2 | `GET /api/board` without session | 401 | matched |
-| 3 | `POST /api/auth/login` wrong password | 401 | matched |
-| 4 | `POST /api/auth/login` valid | 200, sets HttpOnly cookie | matched |
-| 5 | `GET /api/auth/session` with cookie | `{"username":"user"}` | matched |
-| 6 | `GET /api/board` with cookie | 5 columns, 8 cards | matched |
-| 7 | `GET /` with cookie | 200 (static index) | matched |
-| 8 | `GET /` without cookie | 303 redirect to `/login/` | matched |
-| 9-12 | Create -> edit -> move -> delete a card | each 200 | matched |
-| 13 | Card count after the net-zero cycle | back to 8, test card gone | matched |
-| 14 | Create card in unknown column | 404 | matched |
-| 15 | Create card with blank details | 422 (validation) | matched |
-| 16 | `POST /api/ai/chat` (live Groq) | 200 with grounded reply | matched; reply described the real columns, `changed:false`, board unchanged |
-| 17 | `POST /api/auth/logout` | 204, cookie cleared | matched |
-| 18 | `GET /api/board` after logout | 401 | matched |
+## UI/UX Observations (improvement candidates for next iteration)
 
-The live AI reply was: "Exploration, In Progress, and Review each have the most cards,
-with two cards each." It proposed no changes and left the board untouched, confirming the
-refactored AI route applies the same ownership and validation path as before.
+1. **Card titles break mid-word** on the default viewport. The 5-column grid plus chat
+   sidebar leaves each column ~170px wide, causing `break-words` to split normal words
+   like "Prototype" into "Prototy pe". The columns need a minimum width or the layout
+   should scroll horizontally.
+2. **Checklist input placeholder truncated.** "Add checklist item" renders as "Add chec"
+   in narrow columns.
+3. **No horizontal scroll on small screens.** The 5-column layout compresses rather than
+   scrolling below ~1400px viewport width.
+4. **Board delete has no confirmation dialog.** The "Delete" button on the board bar
+   fires the delete immediately.
+5. **No per-operation loading indicator.** Saving/deleting only disables controls (opacity
+   change); no spinner or "Saving..." text.
 
-## Observations (not defects)
+## Code Quality Assessment
 
-1. **Persistent database reflects prior edits.** The live board shows columns
-   `Backlog, Exploration, In Progress, Review, Finished` rather than the seeded
-   `Backlog, Discovery, In Progress, Review, Done`. This is correct persistence in
-   `.data/kanban.sqlite3` from earlier use, not a regression; a fresh database seeds the
-   documented defaults (covered by the backend seeding test).
-2. **A live Groq call was made during this review.** Verifying the AI path end-to-end
-   through the refactored route sent the board and question to the external provider
-   once. The response was coherent, grounded in the actual board, and proposed no changes
-   (`changed:false`). The default test suites never call the provider.
-3. **First smoke-test attempt had a shell-quoting error (resolved).** An initial inline
-   script mangled JSON request bodies and produced spurious 422/405 codes; re-running the
-   checks from a clean script file produced the correct results recorded above. This was
-   a test-harness issue, not an application defect.
+### Strengths
 
-## Not exercised / out of scope
+- **Clean architecture.** Routes, schemas, database, and AI logic in separate modules.
+  The `create_app` factory makes each instance independently testable.
+- **Secure auth.** PBKDF2-SHA256 with 200K rounds, constant-time comparison
+  (`hmac.compare_digest`), httpOnly + samesite=lax session cookies.
+- **No SQL injection risk.** All queries use parameterized statements.
+- **Proper CORS.** Only `127.0.0.1:3000` and `localhost:3000` allowed origins.
+- **AI prompt injection defense.** System prompt tells the model to treat board content
+  as data, not instructions.
+- **Ownership enforcement.** Every board/card/checklist mutation verifies the signed-in
+  user owns the board via `_owned_board_id`.
+- **Cascade deletes.** Board deletion cascades to columns, cards, and checklist items via
+  foreign keys.
+- **Discriminated union for AI changes.** `BoardChange` uses Pydantic discriminator on
+  `operation`, cleanly rejecting unknown operation types.
+- **Frontend types match API.** `kanban.ts` types align with `schemas.py` response models.
 
-- macOS and Linux `start.sh` / `stop.sh` runtime behavior (this run was on Windows;
-  Unix scripts pass `bash -n` syntax checks only).
-- Session expiry after the 8-hour TTL (logic is unit-level; not time-simulated).
-- Concurrent or multi-user access (MVP is hardcoded to one account; the schema supports
-  multiple users but it is not an MVP scenario).
-- `npm audit` advisories reported in an earlier acceptance run were not re-triaged here.
+### Minor Observations (acceptable for MVP)
 
-## Conclusion
+- `LoginRequest` uses unconstrained `str` fields (unlike `RegisterRequest`'s typed
+  `Username`/`Password`). Intentional: login should be permissive to give a consistent
+  "invalid credentials" response rather than leaking which field failed validation.
+- Session cookie lacks `secure=True` -- correct for HTTP-only development.
+- Expired sessions are cleaned lazily (on access), not periodically. Fine for MVP.
+- `BoardChat` uses index-based React keys, safe since messages are append-only.
 
-The codebase remains in a healthy, releasable state for the MVP after the route refactor.
-Every automated suite and the live application path pass, writes persist and are correctly
-rejected when invalid, authentication gates the board and AI routes, and the AI
-integration works against the real provider while never partially mutating the board.
+## Verdict
+
+The application is **production-ready for its MVP scope**. All 121 automated tests pass,
+all manual edge cases behave correctly, and the codebase is well-structured with proper
+security practices. The UI/UX observations above are polish items for the next iteration,
+not blockers.
