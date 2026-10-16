@@ -4,12 +4,19 @@ import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card } from "@/lib/kanban";
+import type { Card, Priority } from "@/lib/kanban";
+import { CardMeta } from "@/components/CardMeta";
 
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => Promise<boolean>;
-  onUpdate: (cardId: string, title: string, details: string) => Promise<boolean>;
+  onUpdate: (
+    cardId: string,
+    title: string,
+    details: string,
+    priority: Priority,
+    dueDate: string | null
+  ) => Promise<boolean>;
   disabled: boolean;
 };
 
@@ -22,6 +29,8 @@ export const KanbanCard = ({
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
   const [details, setDetails] = useState(card.details);
+  const [priority, setPriority] = useState<Priority>(card.priority);
+  const [dueDate, setDueDate] = useState(card.dueDate ?? "");
   const { listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id, disabled: disabled || isEditing });
 
@@ -30,13 +39,21 @@ export const KanbanCard = ({
     transition,
   };
 
+  const startEditing = () => {
+    setTitle(card.title);
+    setDetails(card.details);
+    setPriority(card.priority);
+    setDueDate(card.dueDate ?? "");
+    setIsEditing(true);
+  };
+
   const handleUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextTitle = title.trim();
     if (!nextTitle) {
       return;
     }
-    if (await onUpdate(card.id, nextTitle, details.trim())) {
+    if (await onUpdate(card.id, nextTitle, details.trim(), priority, dueDate || null)) {
       setIsEditing(false);
     }
   };
@@ -44,6 +61,8 @@ export const KanbanCard = ({
   const cancelEditing = () => {
     setTitle(card.title);
     setDetails(card.details);
+    setPriority(card.priority);
+    setDueDate(card.dueDate ?? "");
     setIsEditing(false);
   };
 
@@ -77,6 +96,33 @@ export const KanbanCard = ({
             className="w-full resize-none rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm text-[var(--gray-text)]"
             disabled={disabled}
           />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1 text-xs font-semibold text-[var(--gray-text)]">
+              Priority
+              <select
+                aria-label="Card priority"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value as Priority)}
+                disabled={disabled}
+                className="rounded-lg border border-[var(--stroke)] bg-white px-2 py-1 text-sm text-[var(--navy-dark)]"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-1 text-xs font-semibold text-[var(--gray-text)]">
+              Due date
+              <input
+                type="date"
+                aria-label="Card due date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                disabled={disabled}
+                className="rounded-lg border border-[var(--stroke)] bg-white px-2 py-1 text-sm text-[var(--navy-dark)]"
+              />
+            </label>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="submit"
@@ -104,7 +150,7 @@ export const KanbanCard = ({
             <div className="flex shrink-0 gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
               <button
                 type="button"
-                onClick={() => setIsEditing(true)}
+                onClick={startEditing}
                 className="flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--primary-blue)] transition hover:border-[var(--stroke)] hover:bg-[var(--surface)] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--primary-blue)]"
                 aria-label={`Edit ${card.title}`}
                 disabled={disabled}
@@ -153,6 +199,7 @@ export const KanbanCard = ({
               {card.details}
             </p>
           ) : null}
+          <CardMeta priority={card.priority} dueDate={card.dueDate} />
         </div>
       )}
     </article>

@@ -106,7 +106,15 @@ def create_card(
     user: str = Depends(current_user),
     database: BoardDatabase = Depends(get_database),
 ) -> dict[str, object]:
-    board = database.create_card(user, board_id, column_id, card.title, card.details)
+    board = database.create_card(
+        user,
+        board_id,
+        column_id,
+        card.title,
+        card.details,
+        card.priority,
+        card.due_date,
+    )
     if board is None:
         raise HTTPException(status_code=404, detail="Column not found")
     return board
@@ -120,7 +128,15 @@ def update_card(
     user: str = Depends(current_user),
     database: BoardDatabase = Depends(get_database),
 ) -> dict[str, object]:
-    board = database.update_card(user, board_id, card_id, update.title, update.details)
+    board = database.update_card(
+        user,
+        board_id,
+        card_id,
+        update.title,
+        update.details,
+        update.priority,
+        update.due_date,
+    )
     if board is None:
         raise HTTPException(status_code=404, detail="Card not found")
     return board

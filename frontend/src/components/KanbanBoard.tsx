@@ -16,7 +16,12 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { BoardChat } from "@/components/BoardChat";
 import { BoardBar } from "@/components/BoardBar";
 import { apiFetch } from "@/lib/api";
-import { moveCard, type BoardData, type BoardSummary } from "@/lib/kanban";
+import {
+  moveCard,
+  type BoardData,
+  type BoardSummary,
+  type Priority,
+} from "@/lib/kanban";
 
 const COLUMN_ACCENTS = [
   "var(--accent-yellow)",
@@ -189,7 +194,13 @@ export const KanbanBoard = () => {
       "Unable to rename column. The board was not changed."
     );
 
-  const handleAddCard = (columnId: string, title: string, details: string) =>
+  const handleAddCard = (
+    columnId: string,
+    title: string,
+    details: string,
+    priority: Priority,
+    dueDate: string | null
+  ) =>
     saveBoardChange(
       () =>
         apiFetch(
@@ -197,19 +208,25 @@ export const KanbanBoard = () => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, details }),
+            body: JSON.stringify({ title, details, priority, due_date: dueDate }),
           }
         ),
       "Unable to add card. The board was not changed."
     );
 
-  const handleUpdateCard = (cardId: string, title: string, details: string) =>
+  const handleUpdateCard = (
+    cardId: string,
+    title: string,
+    details: string,
+    priority: Priority,
+    dueDate: string | null
+  ) =>
     saveBoardChange(
       () =>
         apiFetch(`${boardBasePath}/cards/${encodeURIComponent(cardId)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, details }),
+          body: JSON.stringify({ title, details, priority, due_date: dueDate }),
         }),
       "Unable to update card. The board was not changed."
     );

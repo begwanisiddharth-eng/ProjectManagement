@@ -313,6 +313,8 @@ def test_create_update_move_and_delete_card(client: TestClient) -> None:
         "id": created_id,
         "title": "Client follow-up",
         "details": "Send a summary.",
+        "priority": "medium",
+        "dueDate": None,
     }
 
     move_response = client.patch(

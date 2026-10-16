@@ -1,6 +1,6 @@
 """Pydantic request and response models for the board API."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -14,6 +14,8 @@ CardDetails = Annotated[str, StringConstraints(max_length=4000)]
 RequiredCardDetails = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
 ]
+Priority = Literal["low", "medium", "high"]
+DueDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 
 
 class LoginRequest(BaseModel):
@@ -48,11 +50,15 @@ class ColumnRename(BaseModel):
 class CardCreate(BaseModel):
     title: CardTitle
     details: RequiredCardDetails
+    priority: Priority = "medium"
+    due_date: DueDate | None = None
 
 
 class CardUpdate(BaseModel):
     title: CardTitle
     details: CardDetails = ""
+    priority: Priority = "medium"
+    due_date: DueDate | None = None
 
 
 class CardMove(BaseModel):
@@ -64,6 +70,8 @@ class BoardCard(BaseModel):
     id: str
     title: str
     details: str
+    priority: Priority = "medium"
+    dueDate: str | None = None
 
 
 class BoardColumn(BaseModel):

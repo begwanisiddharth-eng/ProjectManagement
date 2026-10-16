@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, vi } from "vitest";
 import { KanbanBoard } from "@/components/KanbanBoard";
@@ -15,14 +15,14 @@ const initialData: BoardData = {
     { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
   ],
   cards: {
-    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes." },
-    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags." },
-    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch dashboard layout." },
-    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels." },
-    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing." },
-    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover and focus states." },
-    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved." },
-    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes." },
+    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes.", priority: "medium", dueDate: null },
+    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags.", priority: "medium", dueDate: null },
+    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch dashboard layout.", priority: "medium", dueDate: null },
+    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels.", priority: "medium", dueDate: null },
+    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing.", priority: "medium", dueDate: null },
+    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover and focus states.", priority: "medium", dueDate: null },
+    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved.", priority: "medium", dueDate: null },
+    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes.", priority: "medium", dueDate: null },
   },
 };
 
@@ -132,9 +132,17 @@ const routeFetch = async (
       const body = JSON.parse(String(init?.body)) as {
         title: string;
         details: string;
+        priority: "low" | "medium" | "high";
+        due_date: string | null;
       };
       const id = "test-card";
-      board.cards[id] = { id, ...body };
+      board.cards[id] = {
+        id,
+        title: body.title,
+        details: body.details,
+        priority: body.priority,
+        dueDate: body.due_date,
+      };
       board.columns.find((column) => column.id === segments[2])?.cardIds.push(id);
       return boardResponse();
     }
@@ -143,9 +151,17 @@ const routeFetch = async (
       const body = JSON.parse(String(init?.body)) as {
         title: string;
         details: string;
+        priority: "low" | "medium" | "high";
+        due_date: string | null;
       };
       if (board.cards[cardId]) {
-        board.cards[cardId] = { id: cardId, ...body };
+        board.cards[cardId] = {
+          id: cardId,
+          title: body.title,
+          details: body.details,
+          priority: body.priority,
+          dueDate: body.due_date,
+        };
       }
       return boardResponse();
     }
@@ -313,6 +329,53 @@ describe("KanbanBoard", () => {
     await waitFor(() =>
       expect(within(column).queryByText("New card")).not.toBeInTheDocument()
     );
+  });
+
+  it("creates a card with a chosen priority and due date", async () => {
+    render(<KanbanBoard />);
+    const column = await getFirstColumn();
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add a card/i })
+    );
+    await userEvent.type(
+      within(column).getByPlaceholderText(/card title/i),
+      "Urgent task"
+    );
+    await userEvent.type(
+      within(column).getByPlaceholderText(/details/i),
+      "Handle ASAP"
+    );
+    await userEvent.selectOptions(
+      within(column).getByLabelText("Card priority"),
+      "high"
+    );
+    fireEvent.change(within(column).getByLabelText("Card due date"), {
+      target: { value: "2026-12-31" },
+    });
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add card/i })
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/boards/${BOARD_ID}/columns/col-backlog/cards`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          title: "Urgent task",
+          details: "Handle ASAP",
+          priority: "high",
+          due_date: "2026-12-31",
+        }),
+      })
+    );
+    const newCard = await within(column).findByTestId("card-test-card");
+    expect(within(newCard).getByText("High")).toBeInTheDocument();
+  });
+
+  it("shows the priority badge on existing cards", async () => {
+    render(<KanbanBoard />);
+    const card = await screen.findByTestId("card-card-1");
+    expect(within(card).getByText("Medium")).toBeInTheDocument();
   });
 
   it("prevents adding a card without nonblank details", async () => {

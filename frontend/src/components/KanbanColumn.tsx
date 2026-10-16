@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import type { Card, Column, Priority } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -11,12 +11,20 @@ type KanbanColumnProps = {
   cards: Card[];
   accent: string;
   onRename: (columnId: string, title: string) => Promise<boolean>;
-  onAddCard: (columnId: string, title: string, details: string) => Promise<boolean>;
+  onAddCard: (
+    columnId: string,
+    title: string,
+    details: string,
+    priority: Priority,
+    dueDate: string | null
+  ) => Promise<boolean>;
   onDeleteCard: (cardId: string) => Promise<boolean>;
   onUpdateCard: (
     cardId: string,
     title: string,
-    details: string
+    details: string,
+    priority: Priority,
+    dueDate: string | null
   ) => Promise<boolean>;
   isSaving: boolean;
 };
@@ -105,7 +113,9 @@ export const KanbanColumn = ({
       </div>
       <div className="px-4 pb-4">
         <NewCardForm
-          onAdd={(title, details) => onAddCard(column.id, title, details)}
+          onAdd={(title, details, priority, dueDate) =>
+            onAddCard(column.id, title, details, priority, dueDate)
+          }
           disabled={isSaving}
         />
       </div>

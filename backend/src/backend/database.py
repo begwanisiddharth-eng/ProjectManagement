@@ -17,7 +17,7 @@ from backend.auth import PASSWORD, USERNAME, hash_password, verify_password
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_DATABASE_PATH = ROOT_DIR / ".data" / "kanban.sqlite3"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 DEFAULT_COLUMNS = (
     ("col-backlog", "Backlog"),
     ("col-discovery", "Discovery"),
@@ -72,6 +72,10 @@ MIGRATION_1 = (
 )
 MIGRATION_2 = (
     "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
+)
+MIGRATION_4 = (
+    "ALTER TABLE cards ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'",
+    "ALTER TABLE cards ADD COLUMN due_date TEXT",
 )
 MIGRATION_3 = (
     """CREATE TABLE boards_v3 (
@@ -129,6 +133,8 @@ class BoardDatabase:
             self._apply_migration(2, MIGRATION_2)
         if current_version < 3:
             self._apply_migration_3()
+        if current_version < 4:
+            self._apply_migration(4, MIGRATION_4)
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._seed_mvp_board(connection)
@@ -368,11 +374,11 @@ class BoardDatabase:
             (board_id,),
         ).fetchall()
         card_rows = connection.execute(
-            """SELECT id, column_id, title, details FROM cards
+            """SELECT id, column_id, title, details, priority, due_date FROM cards
             WHERE board_id = ? ORDER BY column_id, position""",
             (board_id,),
         ).fetchall()
-        cards: dict[str, dict[str, str]] = {}
+        cards: dict[str, dict[str, object]] = {}
         card_ids_by_column: dict[str, list[str]] = {
             str(column["id"]): [] for column in columns
         }
@@ -383,6 +389,8 @@ class BoardDatabase:
                 "id": card_id,
                 "title": str(row["title"]),
                 "details": str(row["details"]),
+                "priority": str(row["priority"]),
+                "dueDate": row["due_date"],
             }
             card_ids_by_column[column_id].append(card_id)
         return {
@@ -416,7 +424,14 @@ class BoardDatabase:
             return self._load_board(connection, board_id) if cursor.rowcount else None
 
     def create_card(
-        self, username: str, board_id: str, column_id: str, title: str, details: str
+        self,
+        username: str,
+        board_id: str,
+        column_id: str,
+        title: str,
+        details: str,
+        priority: str = "medium",
+        due_date: str | None = None,
     ) -> dict[str, object] | None:
         with self.connect() as connection:
             if self._owned_board_id(connection, username, board_id) is None:
@@ -435,22 +450,42 @@ class BoardDatabase:
             now = timestamp()
             connection.execute(
                 """INSERT INTO cards
-                (id, board_id, column_id, title, details, position, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (str(uuid4()), board_id, column_id, title, details, row["position"], now, now),
+                (id, board_id, column_id, title, details, priority, due_date,
+                 position, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid4()),
+                    board_id,
+                    column_id,
+                    title,
+                    details,
+                    priority,
+                    due_date,
+                    row["position"],
+                    now,
+                    now,
+                ),
             )
             return self._load_board(connection, board_id)
 
     def update_card(
-        self, username: str, board_id: str, card_id: str, title: str, details: str
+        self,
+        username: str,
+        board_id: str,
+        card_id: str,
+        title: str,
+        details: str,
+        priority: str = "medium",
+        due_date: str | None = None,
     ) -> dict[str, object] | None:
         with self.connect() as connection:
             if self._owned_board_id(connection, username, board_id) is None:
                 return None
             cursor = connection.execute(
-                """UPDATE cards SET title = ?, details = ?, updated_at = ?
+                """UPDATE cards
+                SET title = ?, details = ?, priority = ?, due_date = ?, updated_at = ?
                 WHERE board_id = ? AND id = ?""",
-                (title, details, timestamp(), board_id, card_id),
+                (title, details, priority, due_date, timestamp(), board_id, card_id),
             )
             return self._load_board(connection, board_id) if cursor.rowcount else None
 
@@ -515,14 +550,17 @@ class BoardDatabase:
                     now = timestamp()
                     connection.execute(
                         """INSERT INTO cards
-                        (id, board_id, column_id, title, details, position, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (id, board_id, column_id, title, details, priority, due_date,
+                         position, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             str(uuid4()),
                             board_id,
                             change.column_id,
                             change.title,
                             change.details,
+                            change.priority,
+                            change.due_date,
                             position,
                             now,
                             now,
@@ -530,7 +568,8 @@ class BoardDatabase:
                     )
                 elif isinstance(change, EditCardChange):
                     card = connection.execute(
-                        "SELECT title, details FROM cards WHERE board_id = ? AND id = ?",
+                        """SELECT title, details, priority, due_date
+                        FROM cards WHERE board_id = ? AND id = ?""",
                         (board_id, change.card_id),
                     ).fetchone()
                     if card is None:
@@ -541,13 +580,32 @@ class BoardDatabase:
                         if change.details is not None
                         else card["details"]
                     )
-                    if title != card["title"] or details != card["details"]:
+                    priority = (
+                        change.priority
+                        if change.priority is not None
+                        else card["priority"]
+                    )
+                    due_date = (
+                        change.due_date
+                        if change.due_date is not None
+                        else card["due_date"]
+                    )
+                    if (
+                        title != card["title"]
+                        or details != card["details"]
+                        or priority != card["priority"]
+                        or due_date != card["due_date"]
+                    ):
                         connection.execute(
-                            """UPDATE cards SET title = ?, details = ?, updated_at = ?
+                            """UPDATE cards
+                            SET title = ?, details = ?, priority = ?, due_date = ?,
+                                updated_at = ?
                             WHERE board_id = ? AND id = ?""",
                             (
                                 title,
                                 details,
+                                priority,
+                                due_date,
                                 timestamp(),
                                 board_id,
                                 change.card_id,

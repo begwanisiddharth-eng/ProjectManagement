@@ -17,8 +17,8 @@ increment so later iterations can build on git history.
    constraint, add board ordering). Refactor DB methods to take board_id.
 3. [DONE] Frontend: registration page; board list / switcher / create / rename /
    delete; wire board-scoped API.
-4. [ ] Card enrichment (backend + frontend): priority, labels, due date, assignee;
-   board search/filter.
+4. [DONE] Card enrichment (backend + frontend): priority + due date (labels/
+   assignee deferred). AI create/edit can set them. Migration v4.
 5. [ ] Activity/audit, card comments or checklist; polish.
 6. [ ] E2E (Playwright) coverage for new flows; coverage review.
 
@@ -51,5 +51,13 @@ increment so later iterations can build on git history.
   pass, lint clean, `npm run build` exports `/`, `/login`, `/register`.
 - NOTE: loop capped at 6 iterations per user request (was 10).
 - NOTE: Playwright browser was not cached; installing chromium to run e2e.
-- Next (Iter 4): card enrichment (priority/labels/due date) backend + frontend,
-  and/or board search; keep coverage strong.
+- Iter 4 [DONE]: card priority + due date, full vertical slice. Migration v4
+  adds `cards.priority` (default 'medium') and nullable `cards.due_date`.
+  Schemas/DB/routes carry `priority` + `due_date`; AI create/edit ops can set
+  them (ai_models). Frontend: `CardMeta` badge, priority select + date input in
+  `NewCardForm` and `KanbanCard`, preview badge. Tests: backend
+  test_card_fields.py (6); frontend create-with-priority + badge tests.
+  Playwright e2e (13) all pass against a real chromium browser.
+- Remaining budget: loop capped at 6; this is still loop-iteration 1 (one long
+  turn). Next: board search/filter + docs refresh (README/AGENTS/PLAN) to reflect
+  auth + multi-board + card fields; final polish and coverage check.
