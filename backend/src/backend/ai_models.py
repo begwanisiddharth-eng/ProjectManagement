@@ -7,6 +7,8 @@ Reply = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, ma
 CardTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 CardDetails = Annotated[str, StringConstraints(max_length=4000)]
 ColumnTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+Priority = Literal["low", "medium", "high"]
+DueDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 RequiredCardDetails = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
 ]
@@ -21,6 +23,8 @@ class CreateCardChange(StrictModel):
     column_id: str
     title: CardTitle
     details: RequiredCardDetails
+    priority: Priority = "medium"
+    due_date: DueDate | None = None
 
 
 class EditCardChange(StrictModel):
@@ -28,11 +32,18 @@ class EditCardChange(StrictModel):
     card_id: str
     title: CardTitle | None = None
     details: CardDetails | None = None
+    priority: Priority | None = None
+    due_date: DueDate | None = None
 
     @model_validator(mode="after")
     def require_an_updated_field(self) -> "EditCardChange":
-        if self.title is None and self.details is None:
-            raise ValueError("An edit must include a title or details value.")
+        if (
+            self.title is None
+            and self.details is None
+            and self.priority is None
+            and self.due_date is None
+        ):
+            raise ValueError("An edit must include at least one updated field.")
         return self
 
 

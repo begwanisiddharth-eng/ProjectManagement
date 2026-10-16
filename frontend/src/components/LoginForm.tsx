@@ -85,6 +85,15 @@ export const LoginForm = () => {
             {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
+        <p className="mt-6 text-center text-sm text-[var(--gray-text)]">
+          Need an account?{" "}
+          <a
+            href="/register/"
+            className="font-semibold text-[var(--primary-blue)] hover:underline"
+          >
+            Create one
+          </a>
+        </p>
       </section>
     </main>
   );

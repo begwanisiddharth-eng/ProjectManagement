@@ -15,12 +15,14 @@ type AIChatResponse = {
 };
 
 type BoardChatProps = {
+  boardId: string;
   disabled: boolean;
   onBoardUpdate: (board: BoardData) => void;
   onBusyChange: (busy: boolean) => void;
 };
 
 export const BoardChat = ({
+  boardId,
   disabled,
   onBoardUpdate,
   onBusyChange,
@@ -52,14 +54,17 @@ export const BoardChat = ({
     onBusyChange(true);
 
     try {
-      const response = await apiFetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question,
-          history: messages.slice(-20),
-        }),
-      });
+      const response = await apiFetch(
+        `/api/boards/${encodeURIComponent(boardId)}/chat`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            history: messages.slice(-20),
+          }),
+        }
+      );
       if (!response.ok) {
         const failure: { detail?: string } = await response.json();
         throw new Error(
