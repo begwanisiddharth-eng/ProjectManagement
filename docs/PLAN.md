@@ -163,3 +163,22 @@ Validated on Windows on 2026-10-15:
 - `scripts/start.ps1` started the server; health, login, board API, and the static frontend were verified; `scripts/stop.ps1` stopped it and released port 8000.
 - macOS and Linux runtime execution was not available in this Windows environment. The Unix scripts passed `bash -n`; their start/stop behavior remains unverified on those operating systems. A first Playwright startup attempt in a fresh environment exceeded the configured 120-second server readiness window; a retry completed all 11 browser tests successfully.
 - No live Groq request was made. `npm ci` reported 27 dependency audit advisories (1 low, 4 moderate, 18 high, and 4 critical); dependency upgrades were not part of this acceptance run.
+
+## Phase 8: Comprehensive PM extension
+
+This phase grows the MVP into a comprehensive app. Sequenced work and per-iteration
+notes are tracked in `docs/RALPH_PROGRESS.md`; the summary follows.
+
+- [x] User management: PBKDF2 password hashing, DB-backed login, a registration
+  endpoint, and per-user default board seeding (migration v2).
+- [x] Multiple boards per user: board CRUD, board-scoped routes
+  `/api/boards/{board_id}/...`, ownership checks, and board ordering (migration v3).
+- [x] Frontend: registration page, board list/switcher/create/rename/delete, and
+  board-scoped API wiring.
+- [x] Card enrichment: priority and optional due date across the API, AI operations,
+  and UI (migration v4).
+- [x] Card checklists: a `card_checklist_items` table (migration v5) with add/toggle/
+  delete routes scoped by board and card ownership, and checklist UI on each card.
+- [x] Coverage: backend tests for auth, boards, card fields, checklists, and
+  migrations; frontend unit tests for the switcher, card fields, and checklists;
+  Playwright e2e for registration, multi-board, card fields, and checklists.

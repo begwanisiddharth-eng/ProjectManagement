@@ -240,6 +240,48 @@ export const KanbanBoard = () => {
       "Unable to remove card. The board was not changed."
     );
 
+  const checklistHandlers = {
+    onAdd: (cardId: string, text: string) =>
+      saveBoardChange(
+        () =>
+          apiFetch(
+            `${boardBasePath}/cards/${encodeURIComponent(cardId)}/checklist`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text }),
+            }
+          ),
+        "Unable to add checklist item. The board was not changed."
+      ),
+    onToggle: (cardId: string, itemId: string, done: boolean) =>
+      saveBoardChange(
+        () =>
+          apiFetch(
+            `${boardBasePath}/cards/${encodeURIComponent(
+              cardId
+            )}/checklist/${encodeURIComponent(itemId)}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ done }),
+            }
+          ),
+        "Unable to update checklist item. The board was not changed."
+      ),
+    onRemove: (cardId: string, itemId: string) =>
+      saveBoardChange(
+        () =>
+          apiFetch(
+            `${boardBasePath}/cards/${encodeURIComponent(
+              cardId
+            )}/checklist/${encodeURIComponent(itemId)}`,
+            { method: "DELETE" }
+          ),
+        "Unable to remove checklist item. The board was not changed."
+      ),
+  };
+
   const handleCreateBoard = async (title: string): Promise<boolean> => {
     setBoardError("");
     try {
@@ -450,6 +492,7 @@ export const KanbanBoard = () => {
                   onAddCard={handleAddCard}
                   onDeleteCard={handleDeleteCard}
                   onUpdateCard={handleUpdateCard}
+                  checklist={checklistHandlers}
                   isSaving={isSaving || isChatBusy}
                 />
               ))}

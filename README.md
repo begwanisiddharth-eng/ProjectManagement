@@ -1,6 +1,6 @@
 # Kanban Studio
 
-Kanban Studio is a locally run project-management MVP. A signed-in user gets one persistent Kanban board with five fixed, renameable columns, editable cards, drag-and-drop movement, and an AI chat panel that can answer questions and make validated board changes.
+Kanban Studio is a locally run project-management app. Users register and sign in, then manage multiple persistent Kanban boards. Each board has five fixed, renameable columns and cards that carry a priority, an optional due date, and a checklist. Cards support editing and drag-and-drop movement, and an AI chat panel can answer questions and make validated board changes.
 
 This guide covers using the app, setting it up, understanding its files, and running its checks. The project intentionally has no container runtime requirement.
 
@@ -10,17 +10,21 @@ This guide covers using the app, setting it up, understanding its files, and run
 
 1. Start the local application using the instructions in [Run locally](#run-locally).
 2. Open <http://127.0.0.1:8000/>.
-3. Sign in with the MVP account:
-   - Username: `user`
-   - Password: `password`
+3. Sign in with the seeded account (Username: `user`, Password: `password`), or create your own account from the Register link on the sign-in page.
 
-These credentials are hardcoded for the MVP. The password is not stored in SQLite. Sessions are held by the backend in memory, expire after eight hours, and are cleared when the server restarts; sign in again after a restart.
+The seeded account is created on first startup; passwords are hashed with PBKDF2 and never stored in plaintext. Sessions are held by the backend in memory, expire after eight hours, and are cleared when the server restarts; sign in again after a restart.
 
-### Work with the board
+### Work with boards
+
+- Switch between your boards with the board tabs. Use "+ New board" to create one, or Rename/Delete to manage the current board. You cannot delete your only board.
+
+### Work with cards
 
 - Rename a column by editing its heading. Its stable column ID remains unchanged.
 - Add a card with both a title and nonblank details. The Add card button stays disabled until both are filled in.
-- Use the pencil button on a card to edit its title or details.
+- Set a card's priority (low/medium/high) and an optional due date when creating or editing it.
+- Add checklist items to a card, check them off to track progress, and remove them.
+- Use the pencil button on a card to edit its title, details, priority, or due date.
 - Use the trash-can button to delete a card.
 - Drag cards between columns or reorder them within a column.
 - Board changes are saved by the backend. A rejected save is reported instead of being displayed as a successful update.
@@ -185,9 +189,20 @@ The browser never receives the Groq key. The AI returns a reply plus typed propo
 The frontend and API represent columns as an ordered array, with each column referring to card IDs. Card details live in a dictionary keyed by ID:
 
 ```ts
+type ChecklistItem = { id: string; text: string; done: boolean };
 type BoardData = {
   columns: { id: string; title: string; cardIds: string[] }[];
-  cards: Record<string, { id: string; title: string; details: string }>;
+  cards: Record<
+    string,
+    {
+      id: string;
+      title: string;
+      details: string;
+      priority: "low" | "medium" | "high";
+      dueDate: string | null;
+      checklist: ChecklistItem[];
+    }
+  >;
 };
 ```
 
@@ -222,14 +237,19 @@ Other operations are `create`, `edit`, and `move`. Pydantic validates the respon
 - `src/backend/main.py` — Assembles the FastAPI application: the `create_app` factory, SQLite initialization on startup, CORS, the health route, router registration, and serving of `frontend/out/`.
 - `src/backend/schemas.py` — Pydantic request and response models for the board API, with the shared string-constraint type aliases.
 - `src/backend/dependencies.py` — Shared FastAPI dependencies: database and session-store access from application state, and the signed-in-user guard.
-- `src/backend/auth_routes.py` — Sign-in, session, and sign-out routes.
-- `src/backend/board_routes.py` — Authenticated board read and card/column mutation routes.
+- `src/backend/auth_routes.py` — Registration, sign-in, session, and sign-out routes.
+- `src/backend/board_routes.py` — Authenticated board CRUD and card/column/checklist mutation routes, all scoped to the signed-in user's board.
 - `src/backend/ai_routes.py` — The authenticated AI chat route that applies validated board changes.
-- `src/backend/auth.py` — Defines the MVP credentials, session cookie name and lifetime, and in-memory session-token store.
-- `src/backend/database.py` — Defines the SQLite schema/migration, seeds the first board, enforces board ownership, loads and changes board data, orders cards, and applies AI operations in transactions.
+- `src/backend/auth.py` — Defines the seeded MVP credentials, PBKDF2 password hashing/verification, session cookie name and lifetime, and the in-memory session-token store.
+- `src/backend/database.py` — Defines the SQLite schema/migrations, seeds the first board, creates and authenticates users, enforces board ownership, loads and changes board/card/checklist data, orders cards, and applies AI operations in transactions.
 - `src/backend/ai_models.py` — Strict Pydantic request, reply, and discriminated board-operation types. Field constraints reject empty names/details and unsupported operations.
 - `src/backend/ai.py` — The single LiteLLM/Groq provider boundary. Builds a prompt from the signed-in board and chat history, calls the configured model with the server key, and validates the JSON response.
 - `tests/test_main.py` — FastAPI, authentication, database lifecycle, API ownership, persistence, and AI endpoint tests. Provider responses are mocked.
+- `tests/test_auth.py` — Registration and hashed-password login tests.
+- `tests/test_boards.py` — Multiple-boards CRUD, ownership, and last-board-delete tests.
+- `tests/test_card_fields.py` — Card priority and due-date tests across the API and AI operations.
+- `tests/test_checklist.py` — Card checklist add/toggle/delete, validation, ownership, and cascade tests.
+- `tests/test_migrations.py` — Schema migration behavior, including the v3 board-table rebuild.
 - `tests/test_ai.py` — Provider configuration, prompt construction, chat history, and AI response validation tests.
 - `tests/test_ai_live.py` — One real-provider arithmetic check, skipped unless explicitly enabled with `RUN_GROQ_CONNECTIVITY=1` and `GROQ_API_KEY`.
 
@@ -250,18 +270,24 @@ Other operations are `create`, `edit`, and `move`. Pydantic validates the respon
 - `src/app/globals.css` — Global styles and the app's yellow, blue, purple, navy, and gray design tokens.
 - `src/app/page.tsx` — Checks the session API before rendering the board or redirecting to sign-in.
 - `src/app/login/page.tsx` — Sign-in route that renders `LoginForm`.
+- `src/app/register/page.tsx` — Registration route that renders `RegisterForm`.
 - `src/app/favicon.ico` — Browser tab icon.
 - `src/components/LoginForm.tsx` — Submits credentials, displays login/network errors, and navigates to the board after sign-in.
-- `src/components/KanbanBoard.tsx` — Loads the board, coordinates drag/drop and card/column API requests, reflects successful saves, handles retry/error states, and lays out the board with chat.
+- `src/components/RegisterForm.tsx` — Validates and submits new-account registration, surfaces taken usernames, and signs the user in.
+- `src/components/KanbanBoard.tsx` — Loads the user's boards and the current board, coordinates drag/drop and card/column/checklist API requests, reflects successful saves, handles retry/error states, and lays out the board with chat.
+- `src/components/BoardBar.tsx` — Board tabs with create, rename, and delete controls for switching between the user's boards.
 - `src/components/KanbanColumn.tsx` — Displays and renames one column, renders its ordered cards, and hosts its add-card form.
-- `src/components/KanbanCard.tsx` — Renders one card, its accessible edit/delete icon buttons, and its inline edit form.
+- `src/components/KanbanCard.tsx` — Renders one card, its priority/due-date metadata, checklist, accessible edit/delete icon buttons, and its inline edit form.
+- `src/components/CardMeta.tsx` — Priority and due-date badges shown on a card.
+- `src/components/CardChecklist.tsx` — Checklist progress, item checkboxes, remove buttons, and the add-item form for a card.
 - `src/components/KanbanCardPreview.tsx` — Compact card view displayed while dragging.
-- `src/components/NewCardForm.tsx` — Validates title and required nonblank details before enabling card creation.
+- `src/components/NewCardForm.tsx` — Validates title and required nonblank details, and captures priority and due date, before enabling card creation.
 - `src/components/BoardChat.tsx` — Responsive chat panel/launcher, conversation history, pending/error UI, and calls to the authenticated AI endpoint. It sends the returned board to `KanbanBoard` so accepted changes show immediately.
 - `src/lib/api.ts` — Shared `fetch` helper that includes credentials and directs development requests to FastAPI.
-- `src/lib/kanban.ts` — TypeScript board/card/column types and the drag/drop ordering helper (`moveCard`).
+- `src/lib/kanban.ts` — TypeScript board/card/column/checklist types and the drag/drop ordering helper (`moveCard`).
 - `src/lib/kanban.test.ts` — Unit tests for board ordering and movement helpers.
-- `src/components/KanbanBoard.test.tsx` — Component tests for loading, saving, errors, card details validation, and chat states/updates.
+- `src/components/KanbanBoard.test.tsx` — Component tests for board switching, loading, saving, errors, card field validation, checklists, and chat states/updates.
+- `src/components/RegisterForm.test.tsx` — Component tests for registration validation and error handling.
 - `src/test/setup.ts` and `src/test/vitest.d.ts` — Testing Library matchers and Vitest type declarations.
 - `tests/auth.spec.ts` — Browser-level sign-in, session, and logout checks.
 - `tests/kanban.spec.ts` — Browser-level board, card, drag/drop, chat, and persistence checks.

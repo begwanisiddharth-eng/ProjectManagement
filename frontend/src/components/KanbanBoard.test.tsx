@@ -15,14 +15,14 @@ const initialData: BoardData = {
     { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
   ],
   cards: {
-    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes.", priority: "medium", dueDate: null },
-    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags.", priority: "medium", dueDate: null },
-    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch dashboard layout.", priority: "medium", dueDate: null },
-    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels.", priority: "medium", dueDate: null },
-    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing.", priority: "medium", dueDate: null },
-    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover and focus states.", priority: "medium", dueDate: null },
-    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved.", priority: "medium", dueDate: null },
-    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes.", priority: "medium", dueDate: null },
+    "card-1": { id: "card-1", title: "Align roadmap themes", details: "Draft quarterly themes.", priority: "medium", dueDate: null, checklist: [] },
+    "card-2": { id: "card-2", title: "Gather customer signals", details: "Review support tags.", priority: "medium", dueDate: null, checklist: [] },
+    "card-3": { id: "card-3", title: "Prototype analytics view", details: "Sketch dashboard layout.", priority: "medium", dueDate: null, checklist: [] },
+    "card-4": { id: "card-4", title: "Refine status language", details: "Standardize column labels.", priority: "medium", dueDate: null, checklist: [] },
+    "card-5": { id: "card-5", title: "Design card layout", details: "Add hierarchy and spacing.", priority: "medium", dueDate: null, checklist: [] },
+    "card-6": { id: "card-6", title: "QA micro-interactions", details: "Verify hover and focus states.", priority: "medium", dueDate: null, checklist: [] },
+    "card-7": { id: "card-7", title: "Ship marketing page", details: "Final copy approved.", priority: "medium", dueDate: null, checklist: [] },
+    "card-8": { id: "card-8", title: "Close onboarding sprint", details: "Document release notes.", priority: "medium", dueDate: null, checklist: [] },
   },
 };
 
@@ -142,9 +142,37 @@ const routeFetch = async (
         details: body.details,
         priority: body.priority,
         dueDate: body.due_date,
+        checklist: [],
       };
       board.columns.find((column) => column.id === segments[2])?.cardIds.push(id);
       return boardResponse();
+    }
+    if (segments[1] === "cards" && segments[3] === "checklist") {
+      const cardId = segments[2];
+      const card = board.cards[cardId];
+      if (!card) {
+        return boardResponse(false);
+      }
+      if (method === "POST") {
+        const body = JSON.parse(String(init?.body)) as { text: string };
+        card.checklist = [
+          ...card.checklist,
+          { id: `item-${card.checklist.length + 1}`, text: body.text, done: false },
+        ];
+        return boardResponse();
+      }
+      const itemId = segments[4];
+      if (method === "PATCH") {
+        const body = JSON.parse(String(init?.body)) as { done: boolean };
+        card.checklist = card.checklist.map((item) =>
+          item.id === itemId ? { ...item, done: body.done } : item
+        );
+        return boardResponse();
+      }
+      if (method === "DELETE") {
+        card.checklist = card.checklist.filter((item) => item.id !== itemId);
+        return boardResponse();
+      }
     }
     if (segments[1] === "cards" && method === "PATCH" && segments.length === 3) {
       const cardId = segments[2];
@@ -161,6 +189,7 @@ const routeFetch = async (
           details: body.details,
           priority: body.priority,
           dueDate: body.due_date,
+          checklist: board.cards[cardId].checklist,
         };
       }
       return boardResponse();
@@ -435,6 +464,43 @@ describe("KanbanBoard", () => {
     expect(fetch).toHaveBeenCalledWith(
       `/api/boards/${BOARD_ID}/cards/card-1`,
       expect.objectContaining({ method: "PATCH" })
+    );
+  });
+
+  it("adds, toggles, and removes a checklist item on a card", async () => {
+    render(<KanbanBoard />);
+    const card = await screen.findByTestId("card-card-1");
+
+    await userEvent.type(
+      within(card).getByLabelText("New checklist item"),
+      "Write the brief"
+    );
+    await userEvent.click(within(card).getByRole("button", { name: "Add" }));
+
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/boards/${BOARD_ID}/cards/card-1/checklist`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ text: "Write the brief" }),
+      })
+    );
+    const checkbox = (await within(card).findByLabelText(
+      "Write the brief"
+    )) as HTMLInputElement;
+    expect(within(card).getByText("Checklist 0/1")).toBeInTheDocument();
+
+    await userEvent.click(checkbox);
+    await waitFor(() =>
+      expect(within(card).getByText("Checklist 1/1")).toBeInTheDocument()
+    );
+
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Remove Write the brief" })
+    );
+    await waitFor(() =>
+      expect(
+        within(card).queryByText("Write the brief")
+      ).not.toBeInTheDocument()
     );
   });
 

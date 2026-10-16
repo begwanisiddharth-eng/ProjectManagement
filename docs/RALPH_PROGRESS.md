@@ -19,8 +19,10 @@ increment so later iterations can build on git history.
    delete; wire board-scoped API.
 4. [DONE] Card enrichment (backend + frontend): priority + due date (labels/
    assignee deferred). AI create/edit can set them. Migration v4.
-5. [ ] Activity/audit, card comments or checklist; polish.
-6. [ ] E2E (Playwright) coverage for new flows; coverage review.
+5. [DONE] Card checklists; docs polish. Each card carries a checklist of items
+   that can be added, toggled done, and removed. Migration v5.
+6. [DONE] E2E (Playwright) coverage for new flows; coverage review and docs
+   refresh (README/AGENTS/PLAN).
 
 ## Status log
 
@@ -58,6 +60,19 @@ increment so later iterations can build on git history.
   `NewCardForm` and `KanbanCard`, preview badge. Tests: backend
   test_card_fields.py (6); frontend create-with-priority + badge tests.
   Playwright e2e (13) all pass against a real chromium browser.
-- Remaining budget: loop capped at 6; this is still loop-iteration 1 (one long
-  turn). Next: board search/filter + docs refresh (README/AGENTS/PLAN) to reflect
-  auth + multi-board + card fields; final polish and coverage check.
+- Iter 5+6 [DONE]: card checklists, full vertical slice, plus docs refresh.
+  Migration v5 adds `card_checklist_items` (id, board_id, card_id, text, done,
+  position, created_at) cascading on card and board delete. Schemas add
+  `ChecklistItemCreate/Update`, `BoardChecklistItem`, and `checklist` on
+  `BoardCard`; `_load_board` attaches each card's checklist. Routes:
+  POST/PATCH/DELETE `/api/boards/{id}/cards/{card_id}/checklist[/{item_id}]`,
+  scoped by board+card ownership. Frontend: `CardChecklist` component
+  (progress, checkboxes, remove, add form), `ChecklistItem` type, grouped
+  `ChecklistHandlers` threaded KanbanBoard -> KanbanColumn -> KanbanCard.
+  Tests: backend test_checklist.py (9); frontend checklist add/toggle/remove
+  unit test; Playwright e2e checklist test (used click() not check() because the
+  controlled checkbox reverts until the save round-trips). Docs: README (intro,
+  use sections, data shape, file guide), AGENTS (requirements/limitations), and
+  PLAN (Phase 8) refreshed to reflect auth + multi-board + card fields +
+  checklists. Full suites green: backend 83 passed/1 skipped, frontend 24 unit,
+  Playwright 14 e2e. All six plan steps are now DONE.

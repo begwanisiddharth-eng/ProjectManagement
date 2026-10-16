@@ -154,6 +154,32 @@ test("shows failed saves and allows retrying the change", async ({ page }) => {
   await expect(titleInput).toHaveValue("Retried title");
 });
 
+test("adds and checks off a checklist item that persists after reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const card = page.getByTestId("card-card-1");
+  const text = `Checklist step ${Date.now()}`;
+
+  await card.getByLabel("New checklist item").fill(text);
+  await card.getByRole("button", { name: "Add" }).click();
+
+  const checkbox = card.getByRole("checkbox", { name: text });
+  await expect(checkbox).toBeVisible();
+  await expect(card.getByText("Checklist 0/1")).toBeVisible();
+  // The checkbox is controlled and reverts until the save round-trips, so click
+  // it (without check()'s immediate state assertion) and wait on the progress.
+  await checkbox.click();
+  await expect(card.getByText("Checklist 1/1")).toBeVisible();
+
+  await page.reload();
+  const reloaded = page.getByTestId("card-card-1");
+  await expect(reloaded.getByRole("checkbox", { name: text })).toBeChecked();
+
+  await reloaded.getByRole("button", { name: `Remove ${text}` }).click();
+  await expect(reloaded.getByText(text)).toHaveCount(0);
+});
+
 test("moves a card between columns", async ({ page }) => {
   await page.goto("/");
   const card = page.getByTestId("card-card-1");

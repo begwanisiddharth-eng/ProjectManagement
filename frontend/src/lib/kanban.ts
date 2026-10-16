@@ -1,11 +1,24 @@
 export type Priority = "low" | "medium" | "high";
 
+export type ChecklistItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
 export type Card = {
   id: string;
   title: string;
   details: string;
   priority: Priority;
   dueDate: string | null;
+  checklist: ChecklistItem[];
+};
+
+export type ChecklistHandlers = {
+  onAdd: (cardId: string, text: string) => Promise<boolean>;
+  onToggle: (cardId: string, itemId: string, done: boolean) => Promise<boolean>;
+  onRemove: (cardId: string, itemId: string) => Promise<boolean>;
 };
 
 export type Column = {

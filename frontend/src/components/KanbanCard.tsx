@@ -4,8 +4,9 @@ import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card, Priority } from "@/lib/kanban";
+import type { Card, ChecklistHandlers, Priority } from "@/lib/kanban";
 import { CardMeta } from "@/components/CardMeta";
+import { CardChecklist } from "@/components/CardChecklist";
 
 type KanbanCardProps = {
   card: Card;
@@ -17,6 +18,7 @@ type KanbanCardProps = {
     priority: Priority,
     dueDate: string | null
   ) => Promise<boolean>;
+  checklist: ChecklistHandlers;
   disabled: boolean;
 };
 
@@ -24,6 +26,7 @@ export const KanbanCard = ({
   card,
   onDelete,
   onUpdate,
+  checklist,
   disabled,
 }: KanbanCardProps) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -200,6 +203,11 @@ export const KanbanCard = ({
             </p>
           ) : null}
           <CardMeta priority={card.priority} dueDate={card.dueDate} />
+          <CardChecklist
+            card={card}
+            handlers={checklist}
+            disabled={disabled}
+          />
         </div>
       )}
     </article>

@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column, Priority } from "@/lib/kanban";
+import type { Card, ChecklistHandlers, Column, Priority } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -26,6 +26,7 @@ type KanbanColumnProps = {
     priority: Priority,
     dueDate: string | null
   ) => Promise<boolean>;
+  checklist: ChecklistHandlers;
   isSaving: boolean;
 };
 
@@ -37,6 +38,7 @@ export const KanbanColumn = ({
   onAddCard,
   onDeleteCard,
   onUpdateCard,
+  checklist,
   isSaving,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({
@@ -101,6 +103,7 @@ export const KanbanColumn = ({
               card={card}
               onDelete={onDeleteCard}
               onUpdate={onUpdateCard}
+              checklist={checklist}
               disabled={isSaving}
             />
           ))}
