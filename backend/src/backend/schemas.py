@@ -16,6 +16,9 @@ RequiredCardDetails = Annotated[
 ]
 Priority = Literal["low", "medium", "high"]
 DueDate = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+ChecklistText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
 
 
 class LoginRequest(BaseModel):
@@ -66,12 +69,27 @@ class CardMove(BaseModel):
     position: int = Field(ge=0)
 
 
+class ChecklistItemCreate(BaseModel):
+    text: ChecklistText
+
+
+class ChecklistItemUpdate(BaseModel):
+    done: bool
+
+
+class BoardChecklistItem(BaseModel):
+    id: str
+    text: str
+    done: bool
+
+
 class BoardCard(BaseModel):
     id: str
     title: str
     details: str
     priority: Priority = "medium"
     dueDate: str | None = None
+    checklist: list[BoardChecklistItem] = []
 
 
 class BoardColumn(BaseModel):

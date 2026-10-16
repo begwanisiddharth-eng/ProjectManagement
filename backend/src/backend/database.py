@@ -17,7 +17,7 @@ from backend.auth import PASSWORD, USERNAME, hash_password, verify_password
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_DATABASE_PATH = ROOT_DIR / ".data" / "kanban.sqlite3"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 DEFAULT_COLUMNS = (
     ("col-backlog", "Backlog"),
     ("col-discovery", "Discovery"),
@@ -77,6 +77,17 @@ MIGRATION_4 = (
     "ALTER TABLE cards ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'",
     "ALTER TABLE cards ADD COLUMN due_date TEXT",
 )
+MIGRATION_5 = (
+    """CREATE TABLE card_checklist_items (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+        card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        text TEXT NOT NULL CHECK (length(trim(text)) > 0),
+        done INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        created_at TEXT NOT NULL
+    )""",
+)
 MIGRATION_3 = (
     """CREATE TABLE boards_v3 (
         id TEXT PRIMARY KEY,
@@ -135,6 +146,8 @@ class BoardDatabase:
             self._apply_migration_3()
         if current_version < 4:
             self._apply_migration(4, MIGRATION_4)
+        if current_version < 5:
+            self._apply_migration(5, MIGRATION_5)
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._seed_mvp_board(connection)
@@ -378,6 +391,20 @@ class BoardDatabase:
             WHERE board_id = ? ORDER BY column_id, position""",
             (board_id,),
         ).fetchall()
+        checklist_rows = connection.execute(
+            """SELECT id, card_id, text, done FROM card_checklist_items
+            WHERE board_id = ? ORDER BY card_id, position""",
+            (board_id,),
+        ).fetchall()
+        checklist_by_card: dict[str, list[dict[str, object]]] = {}
+        for row in checklist_rows:
+            checklist_by_card.setdefault(str(row["card_id"]), []).append(
+                {
+                    "id": str(row["id"]),
+                    "text": str(row["text"]),
+                    "done": bool(row["done"]),
+                }
+            )
         cards: dict[str, dict[str, object]] = {}
         card_ids_by_column: dict[str, list[str]] = {
             str(column["id"]): [] for column in columns
@@ -391,6 +418,7 @@ class BoardDatabase:
                 "details": str(row["details"]),
                 "priority": str(row["priority"]),
                 "dueDate": row["due_date"],
+                "checklist": checklist_by_card.get(card_id, []),
             }
             card_ids_by_column[column_id].append(card_id)
         return {
@@ -511,6 +539,63 @@ class BoardDatabase:
                 {column_id: self._card_ids(connection, board_id, column_id)},
             )
             return self._load_board(connection, board_id)
+
+    @staticmethod
+    def _owned_card_id(
+        connection: sqlite3.Connection, board_id: str, card_id: str
+    ) -> str | None:
+        row = connection.execute(
+            "SELECT id FROM cards WHERE board_id = ? AND id = ?",
+            (board_id, card_id),
+        ).fetchone()
+        return str(row["id"]) if row is not None else None
+
+    def add_checklist_item(
+        self, username: str, board_id: str, card_id: str, text: str
+    ) -> dict[str, object] | None:
+        with self.connect() as connection:
+            if self._owned_board_id(connection, username, board_id) is None:
+                return None
+            if self._owned_card_id(connection, board_id, card_id) is None:
+                return None
+            position = connection.execute(
+                """SELECT COALESCE(MAX(position), -1) + 1 AS position
+                FROM card_checklist_items WHERE card_id = ?""",
+                (card_id,),
+            ).fetchone()["position"]
+            connection.execute(
+                """INSERT INTO card_checklist_items
+                (id, board_id, card_id, text, done, position, created_at)
+                VALUES (?, ?, ?, ?, 0, ?, ?)""",
+                (str(uuid4()), board_id, card_id, text, position, timestamp()),
+            )
+            return self._load_board(connection, board_id)
+
+    def set_checklist_item(
+        self, username: str, board_id: str, card_id: str, item_id: str, done: bool
+    ) -> dict[str, object] | None:
+        with self.connect() as connection:
+            if self._owned_board_id(connection, username, board_id) is None:
+                return None
+            cursor = connection.execute(
+                """UPDATE card_checklist_items SET done = ?
+                WHERE board_id = ? AND card_id = ? AND id = ?""",
+                (1 if done else 0, board_id, card_id, item_id),
+            )
+            return self._load_board(connection, board_id) if cursor.rowcount else None
+
+    def delete_checklist_item(
+        self, username: str, board_id: str, card_id: str, item_id: str
+    ) -> dict[str, object] | None:
+        with self.connect() as connection:
+            if self._owned_board_id(connection, username, board_id) is None:
+                return None
+            cursor = connection.execute(
+                """DELETE FROM card_checklist_items
+                WHERE board_id = ? AND card_id = ? AND id = ?""",
+                (board_id, card_id, item_id),
+            )
+            return self._load_board(connection, board_id) if cursor.rowcount else None
 
     def move_card(
         self,

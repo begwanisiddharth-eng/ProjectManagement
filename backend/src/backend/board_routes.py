@@ -12,6 +12,8 @@ from backend.schemas import (
     CardCreate,
     CardMove,
     CardUpdate,
+    ChecklistItemCreate,
+    ChecklistItemUpdate,
     ColumnRename,
 )
 
@@ -153,6 +155,59 @@ def move_card(
     board = database.move_card(user, board_id, card_id, move.column_id, move.position)
     if board is None:
         raise HTTPException(status_code=404, detail="Card or column not found")
+    return board
+
+
+@router.post(
+    "/{board_id}/cards/{card_id}/checklist",
+    response_model=BoardResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_checklist_item(
+    board_id: str,
+    card_id: str,
+    item: ChecklistItemCreate,
+    user: str = Depends(current_user),
+    database: BoardDatabase = Depends(get_database),
+) -> dict[str, object]:
+    board = database.add_checklist_item(user, board_id, card_id, item.text)
+    if board is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return board
+
+
+@router.patch(
+    "/{board_id}/cards/{card_id}/checklist/{item_id}", response_model=BoardResponse
+)
+def set_checklist_item(
+    board_id: str,
+    card_id: str,
+    item_id: str,
+    update: ChecklistItemUpdate,
+    user: str = Depends(current_user),
+    database: BoardDatabase = Depends(get_database),
+) -> dict[str, object]:
+    board = database.set_checklist_item(
+        user, board_id, card_id, item_id, update.done
+    )
+    if board is None:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    return board
+
+
+@router.delete(
+    "/{board_id}/cards/{card_id}/checklist/{item_id}", response_model=BoardResponse
+)
+def delete_checklist_item(
+    board_id: str,
+    card_id: str,
+    item_id: str,
+    user: str = Depends(current_user),
+    database: BoardDatabase = Depends(get_database),
+) -> dict[str, object]:
+    board = database.delete_checklist_item(user, board_id, card_id, item_id)
+    if board is None:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
     return board
 
 
