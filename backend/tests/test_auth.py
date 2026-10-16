@@ -31,7 +31,10 @@ def test_register_creates_user_with_seeded_board_and_signs_in(
     assert session.status_code == 200
     assert session.json() == {"username": "alice"}
 
-    board = client.get("/api/board")
+    boards = client.get("/api/boards")
+    assert boards.status_code == 200
+    assert len(boards.json()) == 1
+    board = client.get(f"/api/boards/{boards.json()[0]['id']}")
     assert board.status_code == 200
     assert [column["id"] for column in board.json()["columns"]] == [
         "col-backlog",
@@ -126,8 +129,9 @@ def test_users_boards_are_isolated_from_each_other(client: TestClient) -> None:
         "/api/auth/register",
         json={"username": "grace", "password": "gracepassword"},
     )
+    grace_board = client.get("/api/boards").json()[0]["id"]
     client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{grace_board}/columns/col-backlog/cards",
         json={"title": "Grace private card", "details": "Only grace sees this."},
     )
     client.post("/api/auth/logout")
@@ -136,6 +140,9 @@ def test_users_boards_are_isolated_from_each_other(client: TestClient) -> None:
         "/api/auth/register",
         json={"username": "heidi", "password": "heidipassword"},
     )
-    board = client.get("/api/board").json()
+    heidi_board = client.get("/api/boards").json()[0]["id"]
+    board = client.get(f"/api/boards/{heidi_board}").json()
 
     assert board["cards"] == {}
+    # Heidi cannot read Grace's board even with its id.
+    assert client.get(f"/api/boards/{grace_board}").status_code == 404

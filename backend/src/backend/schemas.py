@@ -26,6 +26,21 @@ class RegisterRequest(BaseModel):
     password: Password
 
 
+class BoardCreate(BaseModel):
+    title: BoardTitle
+
+
+class BoardRename(BaseModel):
+    title: BoardTitle
+
+
+class BoardSummary(BaseModel):
+    id: str
+    title: str
+    createdAt: str
+    updatedAt: str
+
+
 class ColumnRename(BaseModel):
     title: BoardTitle
 

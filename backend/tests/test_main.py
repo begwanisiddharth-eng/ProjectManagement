@@ -19,6 +19,12 @@ def sign_in(client: TestClient) -> None:
     assert response.status_code == 200
 
 
+def board_id(client: TestClient) -> str:
+    response = client.get("/api/boards")
+    assert response.status_code == 200
+    return response.json()[0]["id"]
+
+
 def mock_ai_completion(
     monkeypatch: pytest.MonkeyPatch,
     content: str,
@@ -163,7 +169,8 @@ def test_startup_creates_and_seeds_database_without_overwriting_data(
     database = client.app.state.database
     assert database.path.exists()
 
-    board = database.get_board(USERNAME)
+    bid = database.list_boards(USERNAME)[0]["id"]
+    board = database.get_board(USERNAME, bid)
     assert board is not None
     assert len(board["columns"]) == 5
     assert len(board["cards"]) == 8
@@ -176,7 +183,7 @@ def test_startup_creates_and_seeds_database_without_overwriting_data(
         connection.execute("DELETE FROM cards WHERE id = ?", ("card-8",))
     database.initialize()
 
-    preserved_board = database.get_board(USERNAME)
+    preserved_board = database.get_board(USERNAME, bid)
     assert preserved_board is not None
     assert len(preserved_board["cards"]) == 7
     with database.connect() as connection:
@@ -192,15 +199,16 @@ def test_board_updates_survive_a_new_application_instance(
     client: TestClient,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
     database_path = client.app.state.database.path
     frontend_dir = database_path.parent.parent / "frontend"
     created = client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{bid}/columns/col-backlog/cards",
         json={"title": "Persist across restart", "details": "Saved to SQLite."},
     )
     assert created.status_code == 201
     client.patch(
-        "/api/board/columns/col-backlog",
+        f"/api/boards/{bid}/columns/col-backlog",
         json={"title": "Priorities"},
     )
 
@@ -210,7 +218,7 @@ def test_board_updates_survive_a_new_application_instance(
     )
     with TestClient(restarted_app) as restarted_client:
         sign_in(restarted_client)
-        response = restarted_client.get("/api/board")
+        response = restarted_client.get(f"/api/boards/{bid}")
 
     assert response.status_code == 200
     board = response.json()
@@ -225,8 +233,9 @@ def test_get_board_returns_seeded_board_for_authenticated_user(
     client: TestClient,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
 
-    response = client.get("/api/board")
+    response = client.get(f"/api/boards/{bid}")
 
     assert response.status_code == 200
     board = response.json()
@@ -242,7 +251,7 @@ def test_get_board_returns_seeded_board_for_authenticated_user(
 
 
 def test_get_board_requires_authentication(client: TestClient) -> None:
-    response = client.get("/api/board")
+    response = client.get("/api/boards/any-board")
 
     assert response.status_code == 401
 
@@ -251,9 +260,10 @@ def test_rename_column_persists_title_but_keeps_fixed_id(
     client: TestClient,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     response = client.patch(
-        "/api/board/columns/col-backlog",
+        f"/api/boards/{bid}/columns/col-backlog",
         json={"title": "Priorities"},
     )
 
@@ -266,13 +276,14 @@ def test_rename_column_rejects_blank_or_unknown_column(
     client: TestClient,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     blank_response = client.patch(
-        "/api/board/columns/col-backlog",
+        f"/api/boards/{bid}/columns/col-backlog",
         json={"title": "  "},
     )
     unknown_response = client.patch(
-        "/api/board/columns/other",
+        f"/api/boards/{bid}/columns/other",
         json={"title": "Other"},
     )
 
@@ -282,8 +293,9 @@ def test_rename_column_rejects_blank_or_unknown_column(
 
 def test_create_update_move_and_delete_card(client: TestClient) -> None:
     sign_in(client)
+    bid = board_id(client)
     create_response = client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{bid}/columns/col-backlog/cards",
         json={"title": "Follow up", "details": "Contact the client."},
     )
 
@@ -293,7 +305,7 @@ def test_create_update_move_and_delete_card(client: TestClient) -> None:
     assert board["cards"][created_id]["title"] == "Follow up"
 
     update_response = client.patch(
-        f"/api/board/cards/{created_id}",
+        f"/api/boards/{bid}/cards/{created_id}",
         json={"title": "Client follow-up", "details": "Send a summary."},
     )
     assert update_response.status_code == 200
@@ -304,7 +316,7 @@ def test_create_update_move_and_delete_card(client: TestClient) -> None:
     }
 
     move_response = client.patch(
-        f"/api/board/cards/{created_id}/move",
+        f"/api/boards/{bid}/cards/{created_id}/move",
         json={"column_id": "col-review", "position": 0},
     )
     moved_board = move_response.json()
@@ -315,7 +327,7 @@ def test_create_update_move_and_delete_card(client: TestClient) -> None:
         "card-6",
     ]
 
-    delete_response = client.delete(f"/api/board/cards/{created_id}")
+    delete_response = client.delete(f"/api/boards/{bid}/cards/{created_id}")
     deleted_board = delete_response.json()
     assert delete_response.status_code == 200
     assert created_id not in deleted_board["cards"]
@@ -324,9 +336,10 @@ def test_create_update_move_and_delete_card(client: TestClient) -> None:
 
 def test_move_card_reorders_within_a_column(client: TestClient) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     response = client.patch(
-        "/api/board/cards/card-2/move",
+        f"/api/boards/{bid}/cards/card-2/move",
         json={"column_id": "col-backlog", "position": 0},
     )
 
@@ -336,13 +349,14 @@ def test_move_card_reorders_within_a_column(client: TestClient) -> None:
 
 def test_create_card_requires_nonblank_details(client: TestClient) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     missing_details = client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{bid}/columns/col-backlog/cards",
         json={"title": "Card"},
     )
     blank_details = client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{bid}/columns/col-backlog/cards",
         json={"title": "Card", "details": "   "},
     )
 
@@ -354,9 +368,10 @@ def test_move_card_to_first_position_when_source_and_target_positions_match(
     client: TestClient,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     response = client.patch(
-        "/api/board/cards/card-1/move",
+        f"/api/boards/{bid}/cards/card-1/move",
         json={"column_id": "col-review", "position": 0},
     )
 
@@ -368,25 +383,26 @@ def test_move_card_to_first_position_when_source_and_target_positions_match(
 
 def test_board_api_rejects_invalid_and_missing_records(client: TestClient) -> None:
     sign_in(client)
+    bid = board_id(client)
 
     invalid_card = client.post(
-        "/api/board/columns/col-backlog/cards",
+        f"/api/boards/{bid}/columns/col-backlog/cards",
         json={"title": "  ", "details": ""},
     )
     missing_column = client.post(
-        "/api/board/columns/missing/cards",
+        f"/api/boards/{bid}/columns/missing/cards",
         json={"title": "Card", "details": "Card details."},
     )
     missing_card = client.patch(
-        "/api/board/cards/missing",
+        f"/api/boards/{bid}/cards/missing",
         json={"title": "Card"},
     )
     invalid_move = client.patch(
-        "/api/board/cards/card-1/move",
+        f"/api/boards/{bid}/cards/card-1/move",
         json={"column_id": "missing", "position": 0},
     )
     negative_position = client.patch(
-        "/api/board/cards/card-1/move",
+        f"/api/boards/{bid}/cards/card-1/move",
         json={"column_id": "col-review", "position": -1},
     )
 
@@ -399,17 +415,19 @@ def test_board_api_rejects_invalid_and_missing_records(client: TestClient) -> No
 
 def test_board_api_cannot_access_another_users_records(client: TestClient) -> None:
     sign_in(client)
+    bid = board_id(client)
     database = client.app.state.database
     now = timestamp()
     with database.connect() as connection:
         connection.execute(
-            "INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)",
-            ("other-user", "other", now),
+            """INSERT INTO users (id, username, password_hash, created_at)
+            VALUES (?, ?, ?, ?)""",
+            ("other-user", "other", "", now),
         )
         connection.execute(
-            """INSERT INTO boards (id, user_id, title, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)""",
-            ("other-board", "other-user", "Other", now, now),
+            """INSERT INTO boards (id, user_id, title, position, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("other-board", "other-user", "Other", 0, now, now),
         )
         connection.execute(
             "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
@@ -431,12 +449,18 @@ def test_board_api_cannot_access_another_users_records(client: TestClient) -> No
             ),
         )
 
-    response = client.patch(
-        "/api/board/cards/other-card",
+    # Signed in as "user", attempts to reach another user's board are rejected.
+    via_own_board = client.patch(
+        f"/api/boards/{bid}/cards/other-card",
+        json={"title": "Changed", "details": ""},
+    )
+    via_other_board = client.patch(
+        "/api/boards/other-board/cards/other-card",
         json={"title": "Changed", "details": ""},
     )
 
-    assert response.status_code == 404
+    assert via_own_board.status_code == 404
+    assert via_other_board.status_code == 404
     with database.connect() as connection:
         title = connection.execute(
             "SELECT title FROM cards WHERE id = ?", ("other-card",)
@@ -449,13 +473,14 @@ def test_database_enforces_board_column_ownership(client: TestClient) -> None:
     now = timestamp()
     with database.connect() as connection:
         connection.execute(
-            "INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)",
-            ("other-user", "other", now),
+            """INSERT INTO users (id, username, password_hash, created_at)
+            VALUES (?, ?, ?, ?)""",
+            ("other-user", "other", "", now),
         )
         connection.execute(
-            """INSERT INTO boards (id, user_id, title, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)""",
-            ("other-board", "other-user", "Other", now, now),
+            """INSERT INTO boards (id, user_id, title, position, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("other-board", "other-user", "Other", 0, now, now),
         )
         connection.execute(
             "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
@@ -487,7 +512,7 @@ def test_ai_chat_requires_authentication(
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
     response = client.post(
-        "/api/ai/chat",
+        "/api/boards/any-board/chat",
         json={"question": "Create a launch card."},
     )
 
@@ -499,17 +524,19 @@ def test_ai_chat_sends_only_the_signed_in_board_and_applies_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
     database = client.app.state.database
     now = timestamp()
     with database.connect() as connection:
         connection.execute(
-            "INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)",
-            ("other-user", "other", now),
+            """INSERT INTO users (id, username, password_hash, created_at)
+            VALUES (?, ?, ?, ?)""",
+            ("other-user", "other", "", now),
         )
         connection.execute(
-            """INSERT INTO boards (id, user_id, title, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)""",
-            ("other-board", "other-user", "Other Board", now, now),
+            """INSERT INTO boards (id, user_id, title, position, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("other-board", "other-user", "Other Board", 0, now, now),
         )
         connection.execute(
             "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
@@ -563,7 +590,7 @@ def test_ai_chat_sends_only_the_signed_in_board_and_applies_changes(
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={
             "question": "Prepare these launch updates.",
             "history": [
@@ -598,14 +625,15 @@ def test_ai_chat_without_changes_leaves_the_board_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
-    original_board = client.get("/api/board").json()
+    bid = board_id(client)
+    original_board = client.get(f"/api/boards/{bid}").json()
     mock_ai_completion(
         monkeypatch,
         json.dumps({"reply": "No board changes are needed.", "changes": []}),
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "What should I work on next?"},
     )
 
@@ -619,6 +647,7 @@ def test_ai_edit_of_one_field_preserves_the_other_field(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
     mock_ai_completion(
         monkeypatch,
         json.dumps(
@@ -636,7 +665,7 @@ def test_ai_edit_of_one_field_preserves_the_other_field(
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Rename the roadmap card."},
     )
 
@@ -653,6 +682,7 @@ def test_ai_chat_can_rename_a_column(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
     mock_ai_completion(
         monkeypatch,
         json.dumps(
@@ -670,7 +700,7 @@ def test_ai_chat_can_rename_a_column(
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Rename the Done column to Finished."},
     )
 
@@ -682,7 +712,7 @@ def test_ai_chat_can_rename_a_column(
         if column["id"] == "col-done"
     )
     assert renamed_column["title"] == "Finished"
-    assert client.get("/api/board").json()["columns"][4]["title"] == "Finished"
+    assert client.get(f"/api/boards/{bid}").json()["columns"][4]["title"] == "Finished"
 
 
 def test_ai_chat_reports_idempotent_move_as_no_change(
@@ -690,7 +720,8 @@ def test_ai_chat_reports_idempotent_move_as_no_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
-    original_board = client.get("/api/board").json()
+    bid = board_id(client)
+    original_board = client.get(f"/api/boards/{bid}").json()
     mock_ai_completion(
         monkeypatch,
         json.dumps(
@@ -709,7 +740,7 @@ def test_ai_chat_reports_idempotent_move_as_no_change(
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Move the first backlog card to the top."},
     )
 
@@ -723,7 +754,8 @@ def test_ai_chat_rejects_invalid_changes_without_partial_updates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
-    original_board = client.get("/api/board").json()
+    bid = board_id(client)
+    original_board = client.get(f"/api/boards/{bid}").json()
     mock_ai_completion(
         monkeypatch,
         json.dumps(
@@ -753,13 +785,13 @@ def test_ai_chat_rejects_invalid_changes_without_partial_updates(
     )
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Create a task and move a missing task."},
     )
 
     assert response.status_code == 502
     assert "no changes were applied" in response.json()["detail"]
-    assert client.get("/api/board").json() == original_board
+    assert client.get(f"/api/boards/{bid}").json() == original_board
 
 
 @pytest.mark.parametrize(
@@ -776,16 +808,17 @@ def test_ai_chat_rejects_invalid_model_output(
     content: str,
 ) -> None:
     sign_in(client)
-    original_board = client.get("/api/board").json()
+    bid = board_id(client)
+    original_board = client.get(f"/api/boards/{bid}").json()
     mock_ai_completion(monkeypatch, content)
 
     response = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Change the board."},
     )
 
     assert response.status_code == 502
-    assert client.get("/api/board").json() == original_board
+    assert client.get(f"/api/boards/{bid}").json() == original_board
 
 
 def test_ai_chat_reports_missing_key_and_provider_failure(
@@ -793,10 +826,11 @@ def test_ai_chat_reports_missing_key_and_provider_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sign_in(client)
+    bid = board_id(client)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
     missing_key = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Can you help?"},
     )
     assert missing_key.status_code == 503
@@ -808,7 +842,7 @@ def test_ai_chat_reports_missing_key_and_provider_failure(
     monkeypatch.setenv("GROQ_API_KEY", "test-secret")
     monkeypatch.setattr(ai.litellm, "completion", fail_completion)
     provider_failure = client.post(
-        "/api/ai/chat",
+        f"/api/boards/{bid}/chat",
         json={"question": "Can you help?"},
     )
     assert provider_failure.status_code == 502

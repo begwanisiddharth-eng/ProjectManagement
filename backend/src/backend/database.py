@@ -17,7 +17,7 @@ from backend.auth import PASSWORD, USERNAME, hash_password, verify_password
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_DATABASE_PATH = ROOT_DIR / ".data" / "kanban.sqlite3"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DEFAULT_COLUMNS = (
     ("col-backlog", "Backlog"),
     ("col-discovery", "Discovery"),
@@ -73,6 +73,20 @@ MIGRATION_1 = (
 MIGRATION_2 = (
     "ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''",
 )
+MIGRATION_3 = (
+    """CREATE TABLE boards_v3 (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""",
+    """INSERT INTO boards_v3 (id, user_id, title, position, created_at, updated_at)
+        SELECT id, user_id, title, 0, created_at, updated_at FROM boards""",
+    "DROP TABLE boards",
+    "ALTER TABLE boards_v3 RENAME TO boards",
+)
 
 
 def timestamp() -> str:
@@ -104,6 +118,22 @@ class BoardDatabase:
 
     def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        current_version = self._current_version()
+        if current_version > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Database schema version {current_version} is newer than supported version {SCHEMA_VERSION}."
+            )
+        if current_version < 1:
+            self._apply_migration(1, MIGRATION_1)
+        if current_version < 2:
+            self._apply_migration(2, MIGRATION_2)
+        if current_version < 3:
+            self._apply_migration_3()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._seed_mvp_board(connection)
+
+    def _current_version(self) -> int:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
@@ -115,26 +145,45 @@ class BoardDatabase:
             row = connection.execute(
                 "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
             ).fetchone()
-            current_version = int(row["version"])
-            if current_version > SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"Database schema version {current_version} is newer than supported version {SCHEMA_VERSION}."
-                )
-            if current_version < 1:
-                for statement in MIGRATION_1:
-                    connection.execute(statement)
-                connection.execute(
-                    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-                    (1, timestamp()),
-                )
-            if current_version < 2:
-                for statement in MIGRATION_2:
-                    connection.execute(statement)
-                connection.execute(
-                    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-                    (2, timestamp()),
-                )
-            self._seed_mvp_board(connection)
+            return int(row["version"])
+
+    def _apply_migration(self, version: int, statements: tuple[str, ...]) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in statements:
+                connection.execute(statement)
+            connection.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                (version, timestamp()),
+            )
+
+    def _apply_migration_3(self) -> None:
+        """Drop the one-board-per-user UNIQUE constraint and add board ordering.
+
+        Rebuilding a table referenced by foreign keys needs foreign_keys OFF,
+        which SQLite only honors outside a transaction, so this runs on its own
+        connection following the official ALTER TABLE recipe.
+        """
+        connection = sqlite3.connect(self.path, timeout=5)
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_3:
+                connection.execute(statement)
+            connection.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                (3, timestamp()),
+            )
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise RuntimeError("Migration 3 left dangling foreign keys.")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _seed_mvp_board(self, connection: sqlite3.Connection) -> None:
         now = timestamp()
@@ -221,14 +270,96 @@ class BoardDatabase:
         return row is not None and verify_password(password, row["password_hash"])
 
     @staticmethod
-    def _board_id(connection: sqlite3.Connection, username: str) -> str | None:
+    def _owned_board_id(
+        connection: sqlite3.Connection, username: str, board_id: str
+    ) -> str | None:
         row = connection.execute(
             """SELECT boards.id FROM boards
             JOIN users ON users.id = boards.user_id
-            WHERE users.username = ?""",
-            (username,),
+            WHERE users.username = ? AND boards.id = ?""",
+            (username, board_id),
         ).fetchone()
         return str(row["id"]) if row is not None else None
+
+    @staticmethod
+    def _board_summary(row: sqlite3.Row) -> dict[str, str]:
+        return {
+            "id": str(row["id"]),
+            "title": str(row["title"]),
+            "createdAt": str(row["created_at"]),
+            "updatedAt": str(row["updated_at"]),
+        }
+
+    def list_boards(self, username: str) -> list[dict[str, str]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT boards.id, boards.title, boards.created_at, boards.updated_at
+                FROM boards JOIN users ON users.id = boards.user_id
+                WHERE users.username = ?
+                ORDER BY boards.position, boards.created_at""",
+                (username,),
+            ).fetchall()
+            return [self._board_summary(row) for row in rows]
+
+    def create_board(self, username: str, title: str) -> dict[str, str] | None:
+        with self.connect() as connection:
+            user = connection.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if user is None:
+                return None
+            position = connection.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 AS position FROM boards WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()["position"]
+            now = timestamp()
+            board_id = str(uuid4())
+            connection.execute(
+                """INSERT INTO boards (id, user_id, title, position, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (board_id, user["id"], title, position, now, now),
+            )
+            self._seed_columns(connection, board_id)
+            row = connection.execute(
+                "SELECT id, title, created_at, updated_at FROM boards WHERE id = ?",
+                (board_id,),
+            ).fetchone()
+            return self._board_summary(row)
+
+    def rename_board(
+        self, username: str, board_id: str, title: str
+    ) -> dict[str, str] | None:
+        with self.connect() as connection:
+            if self._owned_board_id(connection, username, board_id) is None:
+                return None
+            connection.execute(
+                "UPDATE boards SET title = ?, updated_at = ? WHERE id = ?",
+                (title, timestamp(), board_id),
+            )
+            row = connection.execute(
+                "SELECT id, title, created_at, updated_at FROM boards WHERE id = ?",
+                (board_id,),
+            ).fetchone()
+            return self._board_summary(row)
+
+    def delete_board(self, username: str, board_id: str) -> str:
+        """Delete a board. Return 'deleted', 'not_found', or 'last_board'."""
+        with self.connect() as connection:
+            user = connection.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if user is None:
+                return "not_found"
+            if self._owned_board_id(connection, username, board_id) is None:
+                return "not_found"
+            count = connection.execute(
+                "SELECT COUNT(*) AS count FROM boards WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()["count"]
+            if count <= 1:
+                return "last_board"
+            connection.execute("DELETE FROM boards WHERE id = ?", (board_id,))
+            return "deleted"
 
     @staticmethod
     def _load_board(connection: sqlite3.Connection, board_id: str) -> dict[str, object]:
@@ -266,17 +397,17 @@ class BoardDatabase:
             "cards": cards,
         }
 
-    def get_board(self, username: str) -> dict[str, object] | None:
+    def get_board(self, username: str, board_id: str) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            return self._load_board(connection, board_id) if board_id else None
+            if self._owned_board_id(connection, username, board_id) is None:
+                return None
+            return self._load_board(connection, board_id)
 
     def rename_column(
-        self, username: str, column_id: str, title: str
+        self, username: str, board_id: str, column_id: str, title: str
     ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
             cursor = connection.execute(
                 "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
@@ -285,11 +416,10 @@ class BoardDatabase:
             return self._load_board(connection, board_id) if cursor.rowcount else None
 
     def create_card(
-        self, username: str, column_id: str, title: str, details: str
+        self, username: str, board_id: str, column_id: str, title: str, details: str
     ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
             column = connection.execute(
                 "SELECT id FROM columns WHERE board_id = ? AND id = ?",
@@ -312,11 +442,10 @@ class BoardDatabase:
             return self._load_board(connection, board_id)
 
     def update_card(
-        self, username: str, card_id: str, title: str, details: str
+        self, username: str, board_id: str, card_id: str, title: str, details: str
     ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
             cursor = connection.execute(
                 """UPDATE cards SET title = ?, details = ?, updated_at = ?
@@ -325,10 +454,11 @@ class BoardDatabase:
             )
             return self._load_board(connection, board_id) if cursor.rowcount else None
 
-    def delete_card(self, username: str, card_id: str) -> dict[str, object] | None:
+    def delete_card(
+        self, username: str, board_id: str, card_id: str
+    ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
             card = connection.execute(
                 "SELECT column_id FROM cards WHERE board_id = ? AND id = ?",
@@ -350,24 +480,23 @@ class BoardDatabase:
     def move_card(
         self,
         username: str,
+        board_id: str,
         card_id: str,
         column_id: str,
         position: int,
     ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
             if not self._move_card(connection, board_id, card_id, column_id, position):
                 return None
             return self._load_board(connection, board_id)
 
     def apply_ai_changes(
-        self, username: str, changes: list[BoardChange]
+        self, username: str, board_id: str, changes: list[BoardChange]
     ) -> dict[str, object] | None:
         with self.connect() as connection:
-            board_id = self._board_id(connection, username)
-            if board_id is None:
+            if self._owned_board_id(connection, username, board_id) is None:
                 return None
 
             for change in changes:
